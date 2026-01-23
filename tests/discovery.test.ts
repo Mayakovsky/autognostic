@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { SingleUrlDiscovery } from "../src/publicspace/SingleUrlDiscovery";
 import { LlmsTxtDiscovery } from "../src/publicspace/LlmsTxtDiscovery";
+import { SitemapDiscovery } from "../src/publicspace/SitemapDiscovery";
 import { classifySourceUrl, SourceDiscoveryKind } from "../src/publicspace/UrlClassifier";
 import { createMockHttpService } from "./setup";
 
@@ -129,5 +130,120 @@ describe("classifySourceUrl", () => {
   it("should classify markdown file as SINGLE_URL", () => {
     const result = classifySourceUrl("https://raw.githubusercontent.com/org/repo/main/README.md");
     expect(result.kind).toBe(SourceDiscoveryKind.SINGLE_URL);
+  });
+});
+
+describe("SitemapDiscovery", () => {
+  it("should parse standard sitemap with urlset", async () => {
+    const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://example.com/page1.html</loc>
+    <lastmod>2025-01-01</lastmod>
+  </url>
+  <url>
+    <loc>https://example.com/page2.html</loc>
+  </url>
+  <url>
+    <loc>https://example.com/docs/guide.html</loc>
+  </url>
+</urlset>`;
+
+    const mockHttp = createMockHttpService({
+      "https://example.com/sitemap.xml": sitemapXml,
+    });
+
+    const discovery = new SitemapDiscovery(mockHttp as any, "https://example.com/sitemap.xml");
+    const files = await discovery.list();
+
+    expect(files).toHaveLength(3);
+    expect(files[0]).toEqual({
+      url: "https://example.com/page1.html",
+      path: "page1.html",
+    });
+    expect(files[1]).toEqual({
+      url: "https://example.com/page2.html",
+      path: "page2.html",
+    });
+    expect(files[2]).toEqual({
+      url: "https://example.com/docs/guide.html",
+      path: "docs/guide.html",
+    });
+  });
+
+  it("should parse sitemap index", async () => {
+    const sitemapIndexXml = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>https://example.com/sitemap-posts.xml</loc>
+  </sitemap>
+  <sitemap>
+    <loc>https://example.com/sitemap-pages.xml</loc>
+  </sitemap>
+</sitemapindex>`;
+
+    const mockHttp = createMockHttpService({
+      "https://example.com/sitemap.xml": sitemapIndexXml,
+    });
+
+    const discovery = new SitemapDiscovery(mockHttp as any, "https://example.com/sitemap.xml");
+    const files = await discovery.list();
+
+    expect(files).toHaveLength(2);
+    expect(files[0].url).toBe("https://example.com/sitemap-posts.xml");
+    expect(files[1].url).toBe("https://example.com/sitemap-pages.xml");
+  });
+
+  it("should decode XML entities in URLs", async () => {
+    const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://example.com/page?a=1&amp;b=2</loc>
+  </url>
+</urlset>`;
+
+    const mockHttp = createMockHttpService({
+      "https://example.com/sitemap.xml": sitemapXml,
+    });
+
+    const discovery = new SitemapDiscovery(mockHttp as any, "https://example.com/sitemap.xml");
+    const files = await discovery.list();
+
+    expect(files).toHaveLength(1);
+    expect(files[0].url).toBe("https://example.com/page?a=1&b=2");
+  });
+
+  it("should handle empty sitemap", async () => {
+    const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+</urlset>`;
+
+    const mockHttp = createMockHttpService({
+      "https://example.com/sitemap.xml": sitemapXml,
+    });
+
+    const discovery = new SitemapDiscovery(mockHttp as any, "https://example.com/sitemap.xml");
+    const files = await discovery.list();
+
+    expect(files).toHaveLength(0);
+  });
+
+  it("should handle root URL path", async () => {
+    const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://example.com/</loc>
+  </url>
+</urlset>`;
+
+    const mockHttp = createMockHttpService({
+      "https://example.com/sitemap.xml": sitemapXml,
+    });
+
+    const discovery = new SitemapDiscovery(mockHttp as any, "https://example.com/sitemap.xml");
+    const files = await discovery.list();
+
+    expect(files).toHaveLength(1);
+    expect(files[0].path).toBe("index");
   });
 });

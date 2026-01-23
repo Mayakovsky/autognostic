@@ -27,10 +27,10 @@
 - [x] Size policy preview gate implemented
 
 ### P1 - Required for Full Functionality
-- [ ] Sitemap XML parsing implemented
+- [x] Sitemap XML parsing implemented
 - [ ] GitHub repo discovery implemented
-- [ ] Drizzle syntax verified
-- [ ] roomId/entityId usage confirmed
+- [x] Drizzle syntax verified (unified getDb utility)
+- [x] roomId/entityId usage confirmed
 
 ### P2 - Quality Hardening
 - [ ] Retention policy for old versions
@@ -46,12 +46,19 @@
 
 ## Test Coverage
 
-- `tests/discovery.test.ts` - SingleUrlDiscovery, LlmsTxtDiscovery, URL classifier
+- `tests/discovery.test.ts` - SingleUrlDiscovery, LlmsTxtDiscovery, SitemapDiscovery, URL classifier
 - `tests/policy.test.ts` - SizePolicy and RefreshPolicy logic
 - `tests/versionHash.test.ts` - Version hash computation and needsUpdate logic
 - `tests/auth.test.ts` - Token validation and DatamirrorAuthError
 
+## Database Access
+
+All repositories now use a shared `getDb()` utility (`src/db/getDb.ts`) that:
+- Handles async DB initialization with polling
+- Caches DB handle per runtime
+- Supports multiple adapter patterns (adapter, databaseAdapter, services, getService)
+
 ## Next Steps
 
-1. Implement P1 items (Step 4)
-2. Integration test in Eliza monorepo
+1. Integration test in Eliza monorepo (Step 5)
+2. Optional: Implement GitHub repo discovery

@@ -4,32 +4,26 @@ import {
   datamirrorKnowledgeLink,
   type DatamirrorKnowledgeLinkRow,
 } from "./schema";
+import { getDb } from "./getDb";
 
 export class DatamirrorKnowledgeLinkRepository {
   constructor(private runtime: IAgentRuntime) {}
-
-  private get db() {
-    const adapter: any = (this.runtime as any).databaseAdapter;
-    if (!adapter?.db) {
-      throw new Error("No database adapter for DatamirrorKnowledgeLinkRepository");
-    }
-    return adapter.db;
-  }
 
   async addLink(params: {
     sourceId: string;
     versionId: string;
     knowledgeDocumentId: string;
   }): Promise<void> {
+    const db = await getDb(this.runtime);
     const id = `${params.sourceId}:${params.versionId}:${params.knowledgeDocumentId}`;
-    const existing: DatamirrorKnowledgeLinkRow[] = await this.db
+    const existing: DatamirrorKnowledgeLinkRow[] = await db
       .select()
       .from(datamirrorKnowledgeLink)
       .where(eq(datamirrorKnowledgeLink.id, id))
       .limit(1);
 
     if (!existing[0]) {
-      await this.db.insert(datamirrorKnowledgeLink).values({
+      await db.insert(datamirrorKnowledgeLink).values({
         id,
         sourceId: params.sourceId,
         versionId: params.versionId,
@@ -42,7 +36,8 @@ export class DatamirrorKnowledgeLinkRepository {
     sourceId: string,
     versionId: string
   ): Promise<DatamirrorKnowledgeLinkRow[]> {
-    const rows: DatamirrorKnowledgeLinkRow[] = await this.db
+    const db = await getDb(this.runtime);
+    const rows: DatamirrorKnowledgeLinkRow[] = await db
       .select()
       .from(datamirrorKnowledgeLink)
       .where(

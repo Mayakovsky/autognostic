@@ -4,20 +4,14 @@ import {
   datamirrorVersions,
   type DatamirrorVersionRow,
 } from "./schema";
+import { getDb } from "./getDb";
 
 export class DatamirrorVersionsRepository {
   constructor(private runtime: IAgentRuntime) {}
 
-  private get db() {
-    const adapter: any = (this.runtime as any).databaseAdapter;
-    if (!adapter?.db) {
-      throw new Error("No database adapter for DatamirrorVersionsRepository");
-    }
-    return adapter.db;
-  }
-
   async getLatestActive(sourceId: string): Promise<DatamirrorVersionRow | null> {
-    const rows: DatamirrorVersionRow[] = await this.db
+    const db = await getDb(this.runtime);
+    const rows: DatamirrorVersionRow[] = await db
       .select()
       .from(datamirrorVersions)
       .where(
@@ -33,15 +27,16 @@ export class DatamirrorVersionsRepository {
   }
 
   async createStaging(sourceId: string, versionId: string): Promise<string> {
+    const db = await getDb(this.runtime);
     const id = `${sourceId}:${versionId}`;
-    const rows: DatamirrorVersionRow[] = await this.db
+    const rows: DatamirrorVersionRow[] = await db
       .select()
       .from(datamirrorVersions)
       .where(eq(datamirrorVersions.id, id))
       .limit(1);
 
     if (!rows[0]) {
-      await this.db.insert(datamirrorVersions).values({
+      await db.insert(datamirrorVersions).values({
         id,
         sourceId,
         versionId,
@@ -52,8 +47,9 @@ export class DatamirrorVersionsRepository {
   }
 
   async markActive(sourceId: string, versionId: string): Promise<void> {
+    const db = await getDb(this.runtime);
     const now = new Date();
-    await this.db
+    await db
       .update(datamirrorVersions)
       .set({ status: "archived" })
       .where(
@@ -63,7 +59,7 @@ export class DatamirrorVersionsRepository {
         )
       );
 
-    await this.db
+    await db
       .update(datamirrorVersions)
       .set({ status: "active", activatedAt: now })
       .where(
@@ -75,8 +71,9 @@ export class DatamirrorVersionsRepository {
   }
 
   async markFailed(sourceId: string, versionId: string, reason: string): Promise<void> {
+    const db = await getDb(this.runtime);
     const now = new Date();
-    await this.db
+    await db
       .update(datamirrorVersions)
       .set({
         status: "failed",
