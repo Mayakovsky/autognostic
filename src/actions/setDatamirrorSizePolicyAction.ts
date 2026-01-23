@@ -1,6 +1,7 @@
 import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
 import { DatamirrorSettingsRepository } from "../db/datamirrorSettingsRepository";
 import { MIN_AUTO_INGEST_BYTES, DEFAULT_SIZE_POLICY } from "../config/SizePolicy";
+import { requireValidToken, DatamirrorAuthError } from "../auth/validateToken";
 
 export const SetDatamirrorSizePolicyAction: Action = {
   name: "SET_DATAMIRROR_SIZE_POLICY",
@@ -24,6 +25,22 @@ export const SetDatamirrorSizePolicyAction: Action = {
     _message: Memory,
     args: any
   ): Promise<void | ActionResult | undefined> {
+    const authToken = args.authToken as string | undefined;
+
+    // Validate auth token before proceeding
+    try {
+      requireValidToken(runtime, authToken);
+    } catch (err) {
+      if (err instanceof DatamirrorAuthError) {
+        return {
+          success: false,
+          text: err.message,
+          data: { error: "auth_failed" },
+        };
+      }
+      throw err;
+    }
+
     const repo = new DatamirrorSettingsRepository(runtime);
     const current =
       (await repo.getPolicy(runtime.agentId)) ?? DEFAULT_SIZE_POLICY;

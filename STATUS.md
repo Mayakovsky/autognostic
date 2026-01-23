@@ -19,12 +19,12 @@
 - [x] package.json scripts and devDependencies
 
 ### Build & Lint
-- [ ] Builds without errors
-- [ ] Lint passes
+- [x] Builds without errors
+- [x] Lint passes
 
 ### P0 - Must Fix Before Testing
-- [ ] Auth token validation implemented
-- [ ] Size policy preview gate implemented
+- [x] Auth token validation implemented
+- [x] Size policy preview gate implemented
 
 ### P1 - Required for Full Functionality
 - [ ] Sitemap XML parsing implemented
@@ -46,9 +46,6 @@
 
 ## Next Steps
 
-1. Run `npm install && npm run build && npm run lint`
-2. Fix any build/lint errors
-3. Implement P0 items (auth validation, size policy gate)
-4. Create unit tests
-5. Implement P1 items
-6. Integration test in Eliza monorepo
+1. Create unit tests (Step 3)
+2. Implement P1 items (Step 4)
+3. Integration test in Eliza monorepo

@@ -1,5 +1,6 @@
 import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
 import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
+import { requireValidToken, DatamirrorAuthError } from "../auth/validateToken";
 
 export const AddUrlToKnowledgeAction: Action = {
   name: "ADD_URL_TO_KNOWLEDGE",
@@ -24,6 +25,22 @@ export const AddUrlToKnowledgeAction: Action = {
     _message: Memory,
     args: any
   ): Promise<void | ActionResult | undefined> {
+    const authToken = args.authToken as string | undefined;
+
+    // Validate auth token before proceeding
+    try {
+      requireValidToken(runtime, authToken);
+    } catch (err) {
+      if (err instanceof DatamirrorAuthError) {
+        return {
+          success: false,
+          text: err.message,
+          data: { error: "auth_failed" },
+        };
+      }
+      throw err;
+    }
+
     const url = args.url as string;
     const filename =
       (args.filename as string) || url.split("/").pop() || "document";

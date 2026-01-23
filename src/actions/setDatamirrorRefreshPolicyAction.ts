@@ -1,6 +1,7 @@
 import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
 import { DatamirrorRefreshSettingsRepository } from "../db/datamirrorRefreshSettingsRepository";
 import { DEFAULT_REFRESH_POLICY } from "../config/RefreshPolicy";
+import { requireValidToken, DatamirrorAuthError } from "../auth/validateToken";
 
 export const SetDatamirrorRefreshPolicyAction: Action = {
   name: "SET_DATAMIRROR_REFRESH_POLICY",
@@ -25,6 +26,22 @@ export const SetDatamirrorRefreshPolicyAction: Action = {
     _message: Memory,
     args: any
   ): Promise<void | ActionResult | undefined> {
+    const authToken = args.authToken as string | undefined;
+
+    // Validate auth token before proceeding
+    try {
+      requireValidToken(runtime, authToken);
+    } catch (err) {
+      if (err instanceof DatamirrorAuthError) {
+        return {
+          success: false,
+          text: err.message,
+          data: { error: "auth_failed" },
+        };
+      }
+      throw err;
+    }
+
     const repo = new DatamirrorRefreshSettingsRepository(runtime);
     const current =
       (await repo.getPolicy(runtime.agentId)) ?? DEFAULT_REFRESH_POLICY;

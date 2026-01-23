@@ -13,6 +13,8 @@ import { DatamirrorVersionsRepository } from "../db/datamirrorVersionsRepository
 import { DatamirrorPreviewCacheRepository } from "../db/datamirrorPreviewCacheRepository";
 import { DatamirrorRefreshSettingsRepository } from "../db/datamirrorRefreshSettingsRepository";
 import { DatamirrorKnowledgeLinkRepository } from "../db/datamirrorKnowledgeLinkRepository";
+import { DatamirrorSettingsRepository } from "../db/datamirrorSettingsRepository";
+import { DEFAULT_SIZE_POLICY } from "../config/SizePolicy";
 
 import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
 import type { HttpService } from "../services/httpService";
@@ -46,6 +48,15 @@ class VersionResolver {
   }
 }
 
+export interface ReconciliationResult {
+  sourceId: string;
+  status: "up_to_date" | "reconciled" | "skipped_size_limit" | "failed";
+  versionId?: string;
+  totalBytes?: number;
+  fileCount?: number;
+  error?: string;
+}
+
 export class ReconciliationService {
   private versionResolver = new VersionResolver();
   private sourcesRepo: DatamirrorSourcesRepository;
@@ -53,6 +64,7 @@ export class ReconciliationService {
   private previewCacheRepo: DatamirrorPreviewCacheRepository;
   private refreshRepo: DatamirrorRefreshSettingsRepository;
   private knowledgeLinkRepo: DatamirrorKnowledgeLinkRepository;
+  private settingsRepo: DatamirrorSettingsRepository;
 
   constructor(private runtime: IAgentRuntime) {
     this.sourcesRepo = new DatamirrorSourcesRepository(runtime);
@@ -60,19 +72,25 @@ export class ReconciliationService {
     this.previewCacheRepo = new DatamirrorPreviewCacheRepository(runtime);
     this.refreshRepo = new DatamirrorRefreshSettingsRepository(runtime);
     this.knowledgeLinkRepo = new DatamirrorKnowledgeLinkRepository(runtime);
+    this.settingsRepo = new DatamirrorSettingsRepository(runtime);
   }
 
-  async verifyAndReconcileAll(sources: SourceConfig[]): Promise<void> {
+  async verifyAndReconcileAll(sources: SourceConfig[]): Promise<ReconciliationResult[]> {
+    const results: ReconciliationResult[] = [];
     for (const src of sources) {
       if (!src.enabled) continue;
-      await this.verifyAndReconcileOne(src);
+      const result = await this.verifyAndReconcileOne(src);
+      results.push(result);
     }
+    return results;
   }
 
-  async verifyAndReconcileOne(source: SourceConfig): Promise<void> {
+  async verifyAndReconcileOne(source: SourceConfig): Promise<ReconciliationResult> {
     await this.sourcesRepo.getOrCreate(source.id, source.sourceUrl);
 
     const refreshPolicy = await this.refreshRepo.getPolicy(this.runtime.agentId);
+    const sizePolicy = (await this.settingsRepo.getPolicy(this.runtime.agentId)) ?? DEFAULT_SIZE_POLICY;
+
     const { classified, discovery } = createDiscoveryForRawUrl(
       this.runtime,
       source.sourceUrl
@@ -103,6 +121,52 @@ export class ReconciliationService {
       console.log(`[datamirror] Refreshed preview for ${source.id}`);
     }
 
+    // Enforce size policy during background reconciliation
+    // Hard limit is always enforced - skip sources that exceed it
+    if (preview.totalBytes > sizePolicy.maxBytesHardLimit) {
+      const totalMB = (preview.totalBytes / 1024 / 1024).toFixed(2);
+      const hardLimitMB = (sizePolicy.maxBytesHardLimit / 1024 / 1024).toFixed(2);
+      console.warn(
+        `[datamirror] Source ${source.id} exceeds hard size limit (${totalMB} MB > ${hardLimitMB} MB), skipping reconciliation`
+      );
+      return {
+        sourceId: source.id,
+        status: "skipped_size_limit",
+        totalBytes: preview.totalBytes,
+        fileCount: preview.files.length,
+        error: `Exceeds hard size limit: ${totalMB} MB > ${hardLimitMB} MB`,
+      };
+    }
+
+    // For background reconciliation, also respect auto-ingest threshold
+    // Sources above the auto-ingest threshold should have been explicitly confirmed via action
+    // Background worker only auto-updates sources within the auto-ingest threshold
+    if (preview.totalBytes > sizePolicy.autoIngestBelowBytes) {
+      const totalMB = (preview.totalBytes / 1024 / 1024).toFixed(2);
+      const autoIngestMB = (sizePolicy.autoIngestBelowBytes / 1024 / 1024).toFixed(2);
+
+      // Check if this source was previously reconciled (i.e., user confirmed it before)
+      const existingVersion = await this.versionsRepo.getLatestActive(source.id);
+      if (!existingVersion) {
+        // Never reconciled before and above auto-ingest threshold - skip
+        console.warn(
+          `[datamirror] Source ${source.id} exceeds auto-ingest threshold (${totalMB} MB > ${autoIngestMB} MB) ` +
+            `and has no prior version. Use MIRROR_SOURCE_TO_KNOWLEDGE action with confirmLargeIngest to initialize.`
+        );
+        return {
+          sourceId: source.id,
+          status: "skipped_size_limit",
+          totalBytes: preview.totalBytes,
+          fileCount: preview.files.length,
+          error: `Exceeds auto-ingest threshold (${totalMB} MB > ${autoIngestMB} MB). Use action with confirmLargeIngest to initialize.`,
+        };
+      }
+      // Has prior version - allow update even if above threshold (user confirmed previously)
+      console.log(
+        `[datamirror] Source ${source.id} exceeds auto-ingest threshold but has prior version, proceeding with update`
+      );
+    }
+
     const remoteVersionId =
       this.versionResolver.computeRemoteVersionFromPreview(preview);
     const local = await this.versionsRepo.getLatestActive(source.id);
@@ -115,7 +179,13 @@ export class ReconciliationService {
       console.log(
         `[datamirror] ${source.id} up-to-date @ ${remoteVersionId}`
       );
-      return;
+      return {
+        sourceId: source.id,
+        status: "up_to_date",
+        versionId: remoteVersionId,
+        totalBytes: preview.totalBytes,
+        fileCount: preview.files.length,
+      };
     }
 
     console.log(
@@ -130,6 +200,13 @@ export class ReconciliationService {
       console.log(
         `[datamirror] ${source.id} reconciled to ${remoteVersionId}`
       );
+      return {
+        sourceId: source.id,
+        status: "reconciled",
+        versionId: remoteVersionId,
+        totalBytes: preview.totalBytes,
+        fileCount: preview.files.length,
+      };
     } catch (err) {
       console.error(
         `[datamirror] Reconciliation failed for ${source.id} @ ${remoteVersionId}`,
@@ -140,6 +217,14 @@ export class ReconciliationService {
         remoteVersionId,
         (err as any)?.message ?? "Unknown error"
       );
+      return {
+        sourceId: source.id,
+        status: "failed",
+        versionId: remoteVersionId,
+        totalBytes: preview.totalBytes,
+        fileCount: preview.files.length,
+        error: (err as any)?.message ?? "Unknown error",
+      };
     }
   }
 
