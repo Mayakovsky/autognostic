@@ -35,17 +35,23 @@
 ### P2 - Quality Hardening
 - [ ] Retention policy for old versions
 - [ ] Better error messaging
-- [ ] Unit tests for VersionResolver
-- [ ] Unit tests for preview
-- [ ] Unit tests for policy gating
+- [x] Unit tests for VersionResolver
+- [x] Unit tests for preview (policy tests)
+- [x] Unit tests for policy gating
 
 ### Testing
-- [ ] Unit tests pass
+- [x] Unit tests pass
 - [ ] Integration tested in Eliza monorepo
 - [ ] Functional tests pass
 
+## Test Coverage
+
+- `tests/discovery.test.ts` - SingleUrlDiscovery, LlmsTxtDiscovery, URL classifier
+- `tests/policy.test.ts` - SizePolicy and RefreshPolicy logic
+- `tests/versionHash.test.ts` - Version hash computation and needsUpdate logic
+- `tests/auth.test.ts` - Token validation and DatamirrorAuthError
+
 ## Next Steps
 
-1. Create unit tests (Step 3)
-2. Implement P1 items (Step 4)
-3. Integration test in Eliza monorepo
+1. Implement P1 items (Step 4)
+2. Integration test in Eliza monorepo
