@@ -5,6 +5,7 @@ import {
   datamirrorSources,
   datamirrorVersions,
   datamirrorKnowledgeLink,
+  datamirrorDocuments,
 } from "./db/schema";
 
 export const datamirrorSchema = {
@@ -14,4 +15,5 @@ export const datamirrorSchema = {
   datamirrorSources,
   datamirrorVersions,
   datamirrorKnowledgeLink,
+  datamirrorDocuments,
 };

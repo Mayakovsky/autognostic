@@ -27,3 +27,9 @@ export const datamirrorPlugin: Plugin = {
 };
 
 export default datamirrorPlugin;
+
+export {
+  getExactQuote,
+  getLineContent,
+  getFullDocument,
+} from "./integration/getExactQuote";

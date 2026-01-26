@@ -1,7 +1,8 @@
 import type { IAgentRuntime, UUID } from "@elizaos/core";
 import type { KnowledgeService } from "@elizaos/plugin-knowledge";
 import { HttpService } from "../services/httpService";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
+import { datamirrorDocumentsRepository } from "../db/datamirrorDocumentsRepository";
 
 export interface MirrorDocParams {
   url: string;
@@ -40,6 +41,22 @@ export async function mirrorDocToKnowledge(
     content = buf.toString("base64");
   } else {
     content = await res.text();
+  }
+
+  // Store full document for exact quote retrieval
+  const sourceId = params.metadata?.sourceId as string | undefined;
+  const versionId = params.metadata?.versionId as string | undefined;
+  if (sourceId && versionId) {
+    const contentHash = createHash("sha256").update(content).digest("hex");
+    await datamirrorDocumentsRepository.store(runtime, {
+      sourceId,
+      versionId,
+      url: params.url,
+      content,
+      contentHash,
+      mimeType: contentType,
+      byteSize: Buffer.byteLength(content, "utf8"),
+    });
   }
 
   const clientDocumentId = randomUUID();

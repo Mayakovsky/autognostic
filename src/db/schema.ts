@@ -4,6 +4,8 @@ import {
   boolean,
   timestamp,
   jsonb,
+  uuid,
+  integer,
 } from "drizzle-orm/pg-core";
 
 export const datamirrorSettings = pgTable("datamirror_settings", {
@@ -66,3 +68,16 @@ export const datamirrorKnowledgeLink = pgTable("datamirror_knowledge_link", {
 });
 export type DatamirrorKnowledgeLinkRow =
   typeof datamirrorKnowledgeLink.$inferSelect;
+
+export const datamirrorDocuments = pgTable("datamirror_documents", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sourceId: uuid("source_id").notNull(),
+  versionId: text("version_id").notNull(),
+  url: text("url").notNull(),
+  content: text("content").notNull(),
+  contentHash: text("content_hash").notNull(),
+  mimeType: text("mime_type"),
+  byteSize: integer("byte_size"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+export type DatamirrorDocumentsRow = typeof datamirrorDocuments.$inferSelect;
