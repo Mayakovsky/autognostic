@@ -60,6 +60,9 @@ export const datamirrorDocumentsRepository = {
     versionId: string
   ) {
     const db = await getDb(runtime);
+    if (!db.delete) {
+      throw new Error("Database adapter does not support delete operations");
+    }
     return db
       .delete(datamirrorDocuments)
       .where(
