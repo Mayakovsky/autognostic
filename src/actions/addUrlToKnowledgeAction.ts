@@ -25,7 +25,8 @@ export const AddUrlToKnowledgeAction: Action = {
     _message: Memory,
     args: any
   ): Promise<void | ActionResult | undefined> {
-    const authToken = args.authToken as string | undefined;
+    // Use provided token or fall back to env var (dev convenience)
+    const authToken = (args.authToken as string | undefined) || process.env.DATAMIRROR_AUTH_TOKEN;
 
     // Validate auth token before proceeding
     try {
