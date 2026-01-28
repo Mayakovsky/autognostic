@@ -28,3 +28,4 @@ coverage/
 
 # Bun
 bun.lockb
+plugin-datamirror/
