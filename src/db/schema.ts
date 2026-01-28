@@ -6,6 +6,7 @@ import {
   jsonb,
   uuid,
   integer,
+  index,
 } from "drizzle-orm/pg-core";
 
 // Create dedicated schema for plugin isolation
@@ -74,7 +75,7 @@ export type DatamirrorKnowledgeLinkRow =
 
 export const datamirrorDocuments = datamirror.table("documents", {
   id: uuid("id").defaultRandom().primaryKey(),
-  sourceId: uuid("source_id").notNull(),
+  sourceId: text("source_id").notNull(),
   versionId: text("version_id").notNull(),
   url: text("url").notNull(),
   content: text("content").notNull(),
@@ -84,3 +85,10 @@ export const datamirrorDocuments = datamirror.table("documents", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 export type DatamirrorDocumentsRow = typeof datamirrorDocuments.$inferSelect;
+
+// Database indexes for performance
+export const datamirrorDocumentsUrlIdx = index("datamirror_documents_url_idx").on(datamirrorDocuments.url);
+export const datamirrorDocumentsSourceVersionIdx = index("datamirror_documents_source_version_idx")
+  .on(datamirrorDocuments.sourceId, datamirrorDocuments.versionId);
+export const datamirrorVersionsSourceStatusIdx = index("datamirror_versions_source_status_idx")
+  .on(datamirrorVersions.sourceId, datamirrorVersions.status);

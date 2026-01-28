@@ -8,6 +8,9 @@ import { AddUrlToKnowledgeAction } from "./actions/addUrlToKnowledgeAction";
 import { MirrorSourceToKnowledgeAction } from "./actions/mirrorSourceToKnowledgeAction";
 import { SetDatamirrorSizePolicyAction } from "./actions/setDatamirrorSizePolicyAction";
 import { SetDatamirrorRefreshPolicyAction } from "./actions/setDatamirrorRefreshPolicyAction";
+import { ListSourcesAction } from "./actions/listSourcesAction";
+import { RemoveSourceAction } from "./actions/removeSourceAction";
+import { GetQuoteAction } from "./actions/getQuoteAction";
 
 import { fullDocumentProvider } from "./providers/fullDocumentProvider";
 
@@ -23,6 +26,9 @@ export const datamirrorPlugin: Plugin = {
     MirrorSourceToKnowledgeAction,
     SetDatamirrorSizePolicyAction,
     SetDatamirrorRefreshPolicyAction,
+    ListSourcesAction,
+    RemoveSourceAction,
+    GetQuoteAction,
   ],
   providers: [fullDocumentProvider],
   schema: datamirrorSchema,

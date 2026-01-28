@@ -1,4 +1,5 @@
 import type { IAgentRuntime } from "@elizaos/core";
+import { DB_DEFAULTS } from "../config/constants";
 
 /**
  * Minimal shape we need from the Drizzle DB object.
@@ -123,8 +124,8 @@ export async function getDb(
   const cached = dbCache.get(runtime);
   if (cached) return cached;
 
-  const timeoutMs = opts?.timeoutMs ?? 20_000;
-  const pollMs = opts?.pollMs ?? 250;
+  const timeoutMs = opts?.timeoutMs ?? DB_DEFAULTS.CONNECTION_TIMEOUT_MS;
+  const pollMs = opts?.pollMs ?? DB_DEFAULTS.POLL_INTERVAL_MS;
 
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {

@@ -1,4 +1,5 @@
 import { Service, type IAgentRuntime } from "@elizaos/core";
+import { HTTP_DEFAULTS } from "../config/constants";
 
 /**
  * HttpService
@@ -12,9 +13,8 @@ export class HttpService extends Service {
   override capabilityDescription =
     "Fetches remote HTTP(S) resources (GET/HEAD) for preview and ingestion, with timeouts and safe defaults.";
 
-  private defaultTimeoutMs = 20_000;
-  private defaultUserAgent =
-    "elizaos-plugin-datamirror/1.x (+https://elizaos.ai)";
+  private defaultTimeoutMs = HTTP_DEFAULTS.TIMEOUT_MS;
+  private defaultUserAgent = HTTP_DEFAULTS.USER_AGENT;
 
   /** Required by ElizaOS core (service registration). */
   static async start(runtime: IAgentRuntime): Promise<HttpService> {
@@ -100,7 +100,7 @@ export class HttpService extends Service {
 
     const contentType = res.headers.get("content-type") || "text/plain";
     const content = await res.text();
-    const maxChars = opts?.maxChars ?? 2_000_000;
+    const maxChars = opts?.maxChars ?? HTTP_DEFAULTS.MAX_CONTENT_BYTES;
     const truncated = content.length > maxChars ? content.slice(0, maxChars) : content;
 
     // Detect if we got HTML when we expected text
@@ -120,7 +120,7 @@ export class HttpService extends Service {
       throw new Error(`HTTP ${res.status} (${res.statusText}) for ${url}`);
     }
     const text = await res.text();
-    const maxChars = opts?.maxChars ?? 2_000_000; // 2MB-ish of text safety cap
+    const maxChars = opts?.maxChars ?? HTTP_DEFAULTS.MAX_CONTENT_BYTES; // 2MB-ish of text safety cap
     return text.length > maxChars ? text.slice(0, maxChars) : text;
   }
 

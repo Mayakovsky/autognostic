@@ -52,6 +52,9 @@ const agent = new Agent({
 | `MIRROR_SOURCE_TO_KNOWLEDGE` | Mirror an entire docs site to Knowledge |
 | `SET_DATAMIRROR_SIZE_POLICY` | Configure size limits for mirroring |
 | `SET_DATAMIRROR_REFRESH_POLICY` | Configure refresh intervals |
+| `LIST_DATAMIRROR_SOURCES` | List all mirrored sources and their status |
+| `REMOVE_DATAMIRROR_SOURCE` | Remove a mirrored source and its documents |
+| `GET_EXACT_QUOTE` | Retrieve exact quotes or line content from a stored document |
 
 ### Example Conversations
 
@@ -63,6 +66,14 @@ User: Mirror the entire example.com docs site
 Agent: I'll mirror the docs site. Let me check for llms.txt or sitemap...
       Found 24 documents. Proceeding with ingestion...
       Successfully mirrored 24 documents to knowledge.
+
+User: What sources are mirrored?
+Agent: Mirrored sources (2):
+      - src-1: https://docs.example.com (last: 2025-01-15T10:30:00Z)
+      - src-2: https://api.example.com (last: 2025-01-14T08:00:00Z)
+
+User: Get line 5 from the getting started doc
+Agent: Line 5: "## Installation"
 ```
 
 ## Architecture
@@ -72,7 +83,7 @@ plugin-datamirror/
 ├── src/
 │   ├── index.ts              # Plugin entry
 │   ├── schema.ts             # Schema export
-│   ├── actions/              # 4 actions (add URL, mirror source, set policies)
+│   ├── actions/              # 7 actions (add URL, mirror source, set policies, list, remove, quote)
 │   ├── config/               # SizePolicy, RefreshPolicy
 │   ├── db/                   # Drizzle schema + repositories
 │   ├── integration/          # mirrorDocToKnowledge

@@ -1,0 +1,91 @@
+import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import { getExactQuote, getLineContent, getFullDocument } from "../integration/getExactQuote";
+
+export const GetQuoteAction: Action = {
+  name: "GET_EXACT_QUOTE",
+  description: "Retrieve exact quotes or line content from a stored document. No auth required.",
+  similes: ["QUOTE_FROM", "GET_LINE", "EXACT_QUOTE"],
+  parameters: {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "URL of the document" },
+      searchText: { type: "string", description: "Text to find for exact quote" },
+      lineNumber: { type: "number", description: "Line number to retrieve" },
+      mode: {
+        type: "string",
+        enum: ["search", "line", "full"],
+        description: "search=find text, line=get line N, full=entire doc",
+      },
+    },
+    required: ["url"],
+  },
+
+  validate: async (_runtime: IAgentRuntime, message: Memory) => {
+    const text = ((message.content as any)?.text || "").toLowerCase();
+    return /\b(quote|line\s+\d|exact|verbatim)/i.test(text);
+  },
+
+  async handler(
+    runtime: IAgentRuntime,
+    _message: Memory,
+    _state: any,
+    _options: any,
+    callback: any
+  ): Promise<ActionResult> {
+    const args = (_message.content as any) || {};
+    const url = args.url as string;
+    const mode = (args.mode as string) || "search";
+
+    if (mode === "full") {
+      const content = await getFullDocument(runtime, url);
+      if (!content) {
+        const text = `Document not found: ${url}`;
+        if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
+        return { success: false, text, data: { error: "not_found" } };
+      }
+      const text = `Full document (${content.length} chars):\n\n${content.slice(0, 5000)}${content.length > 5000 ? "\n...[truncated]" : ""}`;
+      if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
+      return {
+        success: true,
+        text,
+        data: { url, charCount: content.length },
+      };
+    }
+
+    if (mode === "line" && args.lineNumber) {
+      const line = await getLineContent(runtime, url, args.lineNumber);
+      if (line === null) {
+        const text = `Line ${args.lineNumber} not found in ${url}`;
+        if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
+        return { success: false, text, data: { error: "not_found" } };
+      }
+      const text = `Line ${args.lineNumber}: "${line}"`;
+      if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
+      return {
+        success: true,
+        text,
+        data: { url, lineNumber: args.lineNumber, content: line },
+      };
+    }
+
+    if (args.searchText) {
+      const result = await getExactQuote(runtime, url, args.searchText);
+      if (!result.found) {
+        const text = `Text not found in ${url}`;
+        if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
+        return { success: false, text, data: { error: "not_found" } };
+      }
+      const text = `Found at line ${result.lineNumber}:\n"${result.quote}"\n\nContext: ...${result.context}...`;
+      if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
+      return {
+        success: true,
+        text,
+        data: result,
+      };
+    }
+
+    const text = "Specify searchText for search mode or lineNumber for line mode";
+    if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
+    return { success: false, text, data: { error: "invalid_params" } };
+  },
+};

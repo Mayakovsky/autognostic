@@ -3,6 +3,7 @@ import type { KnowledgeService } from "@elizaos/plugin-knowledge";
 import { HttpService } from "../services/httpService";
 import { randomUUID, createHash } from "crypto";
 import { datamirrorDocumentsRepository } from "../db/datamirrorDocumentsRepository";
+import { withRetry } from "../utils/retry";
 
 /**
  * Convert URLs to their raw content equivalents.
@@ -83,7 +84,15 @@ export async function mirrorDocToKnowledge(
 
   if (isLikelyText) {
     // Use getRawText for text content - includes HTML detection
-    const result = await http.getRawText(rawUrl);
+    const result = await withRetry(
+      () => http.getRawText(rawUrl),
+      {
+        attempts: 3,
+        onRetry: (err, attempt) => {
+          console.warn(`[datamirror] Retry ${attempt} for ${rawUrl}: ${err.message}`);
+        },
+      }
+    );
     content = result.content;
     contentType = params.contentType || result.contentType;
 
@@ -97,7 +106,15 @@ export async function mirrorDocToKnowledge(
     }
   } else {
     // For binary or unknown content types, fetch normally
-    const res = await http.get(rawUrl);
+    const res = await withRetry(
+      () => http.get(rawUrl),
+      {
+        attempts: 3,
+        onRetry: (err, attempt) => {
+          console.warn(`[datamirror] Retry ${attempt} for ${rawUrl}: ${err.message}`);
+        },
+      }
+    );
     contentType = params.contentType || res.headers.get("content-type") || "application/octet-stream";
 
     if (contentType.startsWith("application/") && !contentType.includes("json")) {

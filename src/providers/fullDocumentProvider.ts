@@ -3,6 +3,7 @@ import { datamirrorDocumentsRepository } from "../db/datamirrorDocumentsReposito
 import { datamirrorDocuments } from "../db/schema";
 import { getDb } from "../db/getDb";
 import { desc } from "drizzle-orm";
+import { PROVIDER_DEFAULTS } from "../config/constants";
 
 /**
  * FullDocumentProvider
@@ -38,19 +39,19 @@ export const fullDocumentProvider: Provider = {
     ];
     const isAskingForQuote = quotePatterns.some(p => p.test(messageText));
 
-    // Get all available documents from database
-    let allDocuments: Array<{ url: string; content: string; createdAt: Date | null }> = [];
+    // Get document inventory (metadata only - no full content loaded)
+    let documentInventory: Array<{ url: string; byteSize: number | null; createdAt: Date | null }> = [];
     try {
       const db = await getDb(runtime);
-      allDocuments = await db
+      documentInventory = await db
         .select({
           url: datamirrorDocuments.url,
-          content: datamirrorDocuments.content,
+          byteSize: datamirrorDocuments.byteSize,
           createdAt: datamirrorDocuments.createdAt,
         })
         .from(datamirrorDocuments)
         .orderBy(desc(datamirrorDocuments.createdAt))
-        .limit(10);
+        .limit(PROVIDER_DEFAULTS.MAX_INVENTORY_SIZE);
     } catch (error) {
       console.error(`[datamirror] Failed to fetch document inventory:`, error);
     }
@@ -89,22 +90,22 @@ export const fullDocumentProvider: Provider = {
     // Deduplicate and normalize URLs for matching
     const uniqueUrls = [...new Set(urlsToCheck)];
 
-    // Try to find matching documents
+    // Try to find matching documents - only fetch full content when needed
     const matchedDocuments: Array<{ url: string; content: string }> = [];
 
     for (const url of uniqueUrls.slice(0, 5)) {
       // Try exact match first
       let content = await datamirrorDocumentsRepository.getFullContent(runtime, url);
 
-      // If no match, try to find by partial URL match (filename)
-      if (!content && allDocuments.length > 0) {
+      // If no match, try to find by partial URL match (filename) in inventory
+      if (!content && documentInventory.length > 0) {
         const filename = url.split('/').pop()?.toLowerCase();
         if (filename) {
-          const partialMatch = allDocuments.find(doc =>
+          const partialMatch = documentInventory.find(doc =>
             doc.url.toLowerCase().includes(filename)
           );
           if (partialMatch) {
-            content = partialMatch.content;
+            content = await datamirrorDocumentsRepository.getFullContent(runtime, partialMatch.url);
           }
         }
       }
@@ -114,11 +115,13 @@ export const fullDocumentProvider: Provider = {
       }
     }
 
-    // FALLBACK: If asking for quotes but no URL match, provide most recent documents
-    if (isAskingForQuote && matchedDocuments.length === 0 && allDocuments.length > 0) {
-      // Add most recent documents as context
-      for (const doc of allDocuments.slice(0, 3)) {
-        matchedDocuments.push({ url: doc.url, content: doc.content });
+    // FALLBACK: If asking for quotes but no URL match, fetch most recent documents' content
+    if (isAskingForQuote && matchedDocuments.length === 0 && documentInventory.length > 0) {
+      for (const doc of documentInventory.slice(0, PROVIDER_DEFAULTS.MAX_DOCUMENTS_IN_CONTEXT)) {
+        const content = await datamirrorDocumentsRepository.getFullContent(runtime, doc.url);
+        if (content) {
+          matchedDocuments.push({ url: doc.url, content });
+        }
       }
     }
 
@@ -127,7 +130,7 @@ export const fullDocumentProvider: Provider = {
     const documentsFound: Array<{ url: string; charCount: number }> = [];
 
     for (const { url, content } of matchedDocuments) {
-      const maxChars = 50000;
+      const maxChars = PROVIDER_DEFAULTS.MAX_CHARS_PER_DOCUMENT;
       const truncatedContent = content.length > maxChars
         ? content.slice(0, maxChars) + "\n\n[... document truncated for context limit ...]"
         : content;
@@ -141,10 +144,10 @@ export const fullDocumentProvider: Provider = {
       );
     }
 
-    // Build document inventory
-    const inventoryLines = allDocuments.map(doc => {
+    // Build document inventory from metadata
+    const inventoryLines = documentInventory.map(doc => {
       const filename = doc.url.split('/').pop() || doc.url;
-      const size = Math.round(doc.content.length / 1024);
+      const size = doc.byteSize ? Math.round(doc.byteSize / 1024) : "?";
       return `- ${filename} (${size}KB) - ${doc.url}`;
     });
 
@@ -168,7 +171,7 @@ ${documentContents.join('\n\n')}
 
 ## REMINDER
 Only quote from the above content. If you cannot find specific text, admit it rather than making something up.`;
-    } else if (allDocuments.length > 0) {
+    } else if (documentInventory.length > 0) {
       // No matched documents but some exist
       text = `# DOCUMENT INVENTORY
 
@@ -196,7 +199,7 @@ Do NOT fabricate or hallucinate document content.`;
       data: {
         documentsFound,
         documentCount: documentsFound.length,
-        totalDocumentsAvailable: allDocuments.length,
+        totalDocumentsAvailable: documentInventory.length,
         isAskingForQuote,
       },
     };
