@@ -113,6 +113,8 @@ export async function mirrorDocToKnowledge(
   const versionId = params.metadata?.versionId as string | undefined;
   if (sourceId && versionId) {
     const contentHash = createHash("sha256").update(content).digest("hex");
+
+    // Store with original URL (what user likely mentions in conversation)
     await datamirrorDocumentsRepository.store(runtime, {
       sourceId,
       versionId,
@@ -122,6 +124,24 @@ export async function mirrorDocToKnowledge(
       mimeType: contentType,
       byteSize: Buffer.byteLength(content, "utf8"),
     });
+
+    // Also store with raw URL if different (for flexible lookup)
+    if (rawUrl !== params.url) {
+      try {
+        await datamirrorDocumentsRepository.store(runtime, {
+          sourceId: sourceId + "-raw",
+          versionId,
+          url: rawUrl,
+          content,
+          contentHash,
+          mimeType: contentType,
+          byteSize: Buffer.byteLength(content, "utf8"),
+        });
+      } catch (err) {
+        // Ignore duplicate key errors - rawUrl might already exist
+        console.debug(`[datamirror] Could not store raw URL entry:`, err);
+      }
+    }
   }
 
   const clientDocumentId = randomUUID();

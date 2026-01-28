@@ -1,31 +1,64 @@
 import type { IAgentRuntime, Memory, Provider, ProviderResult, State } from "@elizaos/core";
 import { datamirrorDocumentsRepository } from "../db/datamirrorDocumentsRepository";
+import { datamirrorDocuments } from "../db/schema";
+import { getDb } from "../db/getDb";
+import { desc } from "drizzle-orm";
 
 /**
  * FullDocumentProvider
  *
  * Provides access to full, unembedded document content for direct quotes.
- * This provider is triggered when the agent needs to quote specific text
- * from documents that have been added to knowledge.
  *
- * The provider searches for URLs mentioned in the conversation and retrieves
- * the full document content, enabling accurate word-for-word quotations.
+ * ANTI-HALLUCINATION DESIGN:
+ * 1. Always provides document inventory so agent knows what's available
+ * 2. Strong instructions to ONLY quote from provided content
+ * 3. Falls back to listing all recent documents if no URL match
+ * 4. Stores both original and raw URLs for flexible matching
  */
 export const fullDocumentProvider: Provider = {
   name: "FULL_DOCUMENT_CONTENT",
   description:
-    "Provides full document text for exact quotes. Use when user asks for specific lines, words, or direct quotes from a document.",
+    "Provides full document text for exact quotes. ALWAYS use this content for quotations - never fabricate.",
+  // High priority to ensure document content is available before agent responds
+  position: -10,
 
   async get(
     runtime: IAgentRuntime,
     message: Memory,
     state: State
   ): Promise<ProviderResult> {
-    // Extract URLs from recent messages to find relevant documents
+    const messageText = (message.content as any)?.text || "";
+
+    // Detect if user is asking for quotes/content from documents
+    const quotePatterns = [
+      /quote/i, /first\s+\d+\s+words?/i, /last\s+\d+\s+words?/i,
+      /line\s+\d+/i, /what\s+does.*say/i, /read.*from/i,
+      /content\s+of/i, /text\s+of/i, /words?\s+in/i,
+      /document/i, /file/i, /from\s+the/i
+    ];
+    const isAskingForQuote = quotePatterns.some(p => p.test(messageText));
+
+    // Get all available documents from database
+    let allDocuments: Array<{ url: string; content: string; createdAt: Date | null }> = [];
+    try {
+      const db = await getDb(runtime);
+      allDocuments = await db
+        .select({
+          url: datamirrorDocuments.url,
+          content: datamirrorDocuments.content,
+          createdAt: datamirrorDocuments.createdAt,
+        })
+        .from(datamirrorDocuments)
+        .orderBy(desc(datamirrorDocuments.createdAt))
+        .limit(10);
+    } catch (error) {
+      console.error(`[datamirror] Failed to fetch document inventory:`, error);
+    }
+
+    // Extract URLs from conversation for targeted lookup
     const urlsToCheck: string[] = [];
 
     // Check current message
-    const messageText = (message.content as any)?.text || "";
     const urlMatches = messageText.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi);
     if (urlMatches) {
       urlsToCheck.push(...urlMatches);
@@ -42,8 +75,7 @@ export const fullDocumentProvider: Provider = {
       }
     }
 
-    // Also check for document references in knowledge metadata
-    // Look for sourceUrl patterns in state
+    // Check knowledge metadata for sourceUrl
     if (state?.knowledge) {
       const knowledgeText = typeof state.knowledge === "string"
         ? state.knowledge
@@ -54,57 +86,118 @@ export const fullDocumentProvider: Provider = {
       }
     }
 
-    // Deduplicate URLs
+    // Deduplicate and normalize URLs for matching
     const uniqueUrls = [...new Set(urlsToCheck)];
 
-    if (uniqueUrls.length === 0) {
-      return { text: "" };
-    }
+    // Try to find matching documents
+    const matchedDocuments: Array<{ url: string; content: string }> = [];
 
-    // Try to retrieve full content for each URL
-    const documentContents: string[] = [];
-    const documentsFound: Array<{ url: string; charCount: number }> = [];
+    for (const url of uniqueUrls.slice(0, 5)) {
+      // Try exact match first
+      let content = await datamirrorDocumentsRepository.getFullContent(runtime, url);
 
-    for (const url of uniqueUrls.slice(0, 5)) { // Limit to 5 documents to avoid context overflow
-      try {
-        const content = await datamirrorDocumentsRepository.getFullContent(runtime, url);
-        if (content) {
-          // Truncate very large documents but keep enough for quotes
-          const maxChars = 50000; // ~12k tokens
-          const truncatedContent = content.length > maxChars
-            ? content.slice(0, maxChars) + "\n\n[... document truncated for context limit ...]"
-            : content;
-
-          documentsFound.push({ url, charCount: content.length });
-
-          documentContents.push(
-            `=== FULL DOCUMENT: ${url} ===\n` +
-            `(Use this for exact quotes and line references)\n\n` +
-            truncatedContent +
-            `\n=== END DOCUMENT ===\n`
+      // If no match, try to find by partial URL match (filename)
+      if (!content && allDocuments.length > 0) {
+        const filename = url.split('/').pop()?.toLowerCase();
+        if (filename) {
+          const partialMatch = allDocuments.find(doc =>
+            doc.url.toLowerCase().includes(filename)
           );
+          if (partialMatch) {
+            content = partialMatch.content;
+          }
         }
-      } catch (error) {
-        // Silently skip documents that can't be retrieved
-        console.debug(`[datamirror] Could not retrieve full document for ${url}:`, error);
+      }
+
+      if (content) {
+        matchedDocuments.push({ url, content });
       }
     }
 
-    if (documentContents.length === 0) {
-      return { text: "" };
+    // FALLBACK: If asking for quotes but no URL match, provide most recent documents
+    if (isAskingForQuote && matchedDocuments.length === 0 && allDocuments.length > 0) {
+      // Add most recent documents as context
+      for (const doc of allDocuments.slice(0, 3)) {
+        matchedDocuments.push({ url: doc.url, content: doc.content });
+      }
     }
 
-    const text = (
-      "# Full Document Content (for direct quotes)\n\n" +
-      "The following are complete document texts. Use these for accurate quotations.\n\n" +
-      documentContents.join("\n\n")
-    );
+    // Build response
+    const documentContents: string[] = [];
+    const documentsFound: Array<{ url: string; charCount: number }> = [];
+
+    for (const { url, content } of matchedDocuments) {
+      const maxChars = 50000;
+      const truncatedContent = content.length > maxChars
+        ? content.slice(0, maxChars) + "\n\n[... document truncated for context limit ...]"
+        : content;
+
+      documentsFound.push({ url, charCount: content.length });
+
+      documentContents.push(
+        `=== FULL DOCUMENT: ${url} ===\n` +
+        truncatedContent +
+        `\n=== END DOCUMENT ===`
+      );
+    }
+
+    // Build document inventory
+    const inventoryLines = allDocuments.map(doc => {
+      const filename = doc.url.split('/').pop() || doc.url;
+      const size = Math.round(doc.content.length / 1024);
+      return `- ${filename} (${size}KB) - ${doc.url}`;
+    });
+
+    // Construct final output with STRONG anti-hallucination instructions
+    let text = "";
+
+    if (documentContents.length > 0) {
+      text = `# DOCUMENT CONTENT FOR QUOTATION
+
+## IMPORTANT INSTRUCTIONS
+- You MUST quote ONLY from the document text provided below
+- Do NOT fabricate, guess, or hallucinate any content
+- If the requested content is not in the documents below, say "I don't have access to that specific content"
+- Count words/lines carefully using the actual text provided
+
+## AVAILABLE DOCUMENTS IN KNOWLEDGE BASE
+${inventoryLines.length > 0 ? inventoryLines.join('\n') : '(No documents stored)'}
+
+## FULL DOCUMENT CONTENT
+${documentContents.join('\n\n')}
+
+## REMINDER
+Only quote from the above content. If you cannot find specific text, admit it rather than making something up.`;
+    } else if (allDocuments.length > 0) {
+      // No matched documents but some exist
+      text = `# DOCUMENT INVENTORY
+
+## IMPORTANT
+You have documents in your knowledge base but none matched the current conversation.
+If the user is asking about a document, ask them to clarify which one.
+
+## AVAILABLE DOCUMENTS
+${inventoryLines.join('\n')}
+
+## NOTE
+To access document content for quotation, the document URL should be mentioned in the conversation.
+Do NOT fabricate document content - only quote from content explicitly provided to you.`;
+    } else {
+      // No documents at all
+      text = `# NO DOCUMENTS AVAILABLE
+
+There are no documents stored in the knowledge base.
+If the user asks for quotes from a document, inform them that the document needs to be added first.
+Do NOT fabricate or hallucinate document content.`;
+    }
 
     return {
       text,
       data: {
         documentsFound,
         documentCount: documentsFound.length,
+        totalDocumentsAvailable: allDocuments.length,
+        isAskingForQuote,
       },
     };
   },
