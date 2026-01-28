@@ -35,11 +35,18 @@ export class HttpService extends Service {
     // close them here.
   }
 
-  private buildHeaders(extra?: HeadersInit): Headers {
+  private buildHeaders(extra?: HeadersInit, preferRawText = false): Headers {
     const h = new Headers(extra ?? {});
     if (!h.has("user-agent")) h.set("user-agent", this.defaultUserAgent);
-    // Encourage deterministic responses from some CDNs
-    if (!h.has("accept")) h.set("accept", "*/*");
+    // Set Accept header - prefer raw text content when requested
+    if (!h.has("accept")) {
+      if (preferRawText) {
+        // Request raw text content - helps with content negotiation on some servers
+        h.set("accept", "text/plain, text/markdown, text/*, application/json, */*;q=0.1");
+      } else {
+        h.set("accept", "*/*");
+      }
+    }
     return h;
   }
 
@@ -67,14 +74,41 @@ export class HttpService extends Service {
 
   async get(
     url: string,
-    opts?: { timeoutMs?: number; headers?: HeadersInit }
+    opts?: { timeoutMs?: number; headers?: HeadersInit; preferRawText?: boolean }
   ): Promise<Response> {
     const timeoutMs = opts?.timeoutMs ?? this.defaultTimeoutMs;
-    const headers = this.buildHeaders(opts?.headers);
+    const headers = this.buildHeaders(opts?.headers, opts?.preferRawText);
 
     return this.withTimeout(timeoutMs, (signal) =>
       fetch(url, { method: "GET", headers, signal, redirect: "follow" })
     );
+  }
+
+  /**
+   * Fetch raw text content from a URL.
+   * - Uses Accept headers to prefer text/plain content
+   * - Warns if HTML is returned when text was expected
+   */
+  async getRawText(
+    url: string,
+    opts?: { timeoutMs?: number; headers?: HeadersInit; maxChars?: number }
+  ): Promise<{ content: string; contentType: string; isHtml: boolean }> {
+    const res = await this.get(url, { ...opts, preferRawText: true });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} (${res.statusText}) for ${url}`);
+    }
+
+    const contentType = res.headers.get("content-type") || "text/plain";
+    const content = await res.text();
+    const maxChars = opts?.maxChars ?? 2_000_000;
+    const truncated = content.length > maxChars ? content.slice(0, maxChars) : content;
+
+    // Detect if we got HTML when we expected text
+    const isHtml = contentType.includes("text/html") ||
+                   truncated.trimStart().toLowerCase().startsWith("<!doctype") ||
+                   truncated.trimStart().toLowerCase().startsWith("<html");
+
+    return { content: truncated, contentType, isHtml };
   }
 
   async getText(

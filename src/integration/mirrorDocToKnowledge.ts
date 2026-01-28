@@ -72,19 +72,40 @@ export async function mirrorDocToKnowledge(
 
   // Convert GitHub/GitLab blob URLs to raw content URLs
   const rawUrl = normalizeToRawUrl(params.url);
-  const res = await http.get(rawUrl);
-  const contentType =
-    params.contentType || res.headers.get("content-type") || "text/plain";
+
+  // Determine if this is likely a text file based on extension
+  const textExtensions = [".md", ".txt", ".json", ".xml", ".yaml", ".yml", ".csv", ".html", ".htm", ".js", ".ts", ".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".css", ".scss", ".less"];
+  const isLikelyText = textExtensions.some(ext => rawUrl.toLowerCase().endsWith(ext)) ||
+                       params.contentType?.startsWith("text/");
 
   let content: string;
-  if (
-    contentType.startsWith("application/") &&
-    !contentType.includes("json")
-  ) {
-    const buf = Buffer.from(await res.arrayBuffer());
-    content = buf.toString("base64");
+  let contentType: string;
+
+  if (isLikelyText) {
+    // Use getRawText for text content - includes HTML detection
+    const result = await http.getRawText(rawUrl);
+    content = result.content;
+    contentType = params.contentType || result.contentType;
+
+    // Warn if we got HTML when expecting text (but not for .html files)
+    if (result.isHtml && !rawUrl.toLowerCase().endsWith(".html") && !rawUrl.toLowerCase().endsWith(".htm")) {
+      console.warn(
+        `[datamirror] WARNING: Received HTML content from ${rawUrl} - ` +
+        `the URL may be a webpage wrapper instead of raw content. ` +
+        `Original URL: ${params.url}`
+      );
+    }
   } else {
-    content = await res.text();
+    // For binary or unknown content types, fetch normally
+    const res = await http.get(rawUrl);
+    contentType = params.contentType || res.headers.get("content-type") || "application/octet-stream";
+
+    if (contentType.startsWith("application/") && !contentType.includes("json")) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      content = buf.toString("base64");
+    } else {
+      content = await res.text();
+    }
   }
 
   // Store full document for exact quote retrieval
