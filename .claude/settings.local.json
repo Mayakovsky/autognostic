@@ -5,7 +5,32 @@
       "Bash(npm run build:*)",
       "Bash(npm run lint)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest run)",
+      "Bash(npx vitest:*)",
+      "Bash(echo:*)",
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(dir node_modulesvitest)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git rebase:*)",
+      "Bash(git stash:*)",
+      "Bash(bun add:*)",
+      "Bash(bun run build:*)",
+      "Bash(bun run dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(tee:*)",
+      "Bash(curl:*)",
+      "Bash(ollama --version:*)",
+      "Bash(cmd.exe /c \"ollama --version\")",
+      "Bash(\"C:/Users/kidco/AppData/Local/Programs/Ollama/ollama.exe\" pull nomic-embed-text)",
+      "Bash(\"C:/Users/kidco/AppData/Local/Programs/Ollama/ollama.exe\" list)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
