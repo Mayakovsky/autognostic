@@ -2,95 +2,131 @@ import type { IAgentRuntime } from "@elizaos/core";
 
 export interface TokenValidationResult {
   valid: boolean;
+  authEnabled: boolean;
+  needsToken: boolean;
   error?: string;
 }
 
+export interface AuthConfig {
+  enabled: boolean;
+  token?: string;
+}
+
 /**
- * Validates the Datamirror auth token for write operations.
+ * DATAMIRROR AUTH SCHEMA
+ * ======================
  *
- * Token validation strategy:
- * 1. Check if auth is disabled (dev mode)
- * 2. Check if token is provided and non-empty
- * 3. Compare against DATAMIRROR_AUTH_TOKEN environment variable
- * 4. If no env token is configured, allow in dev mode, reject in prod
+ * Design Philosophy:
+ * - Auth is OFF by default (open access to knowledge management)
+ * - Auth can be ENABLED by admin when access control is needed
+ * - When enabled, token is REQUIRED for write operations
+ * - Agent will ASK for token when auth is enabled but token not provided
+ *
+ * Configuration:
+ * - DATAMIRROR_AUTH_ENABLED: "true" | "false" (default: false)
+ * - DATAMIRROR_AUTH_TOKEN: string (the password, only checked when enabled)
+ *
+ * Use Cases:
+ * 1. Personal agent (single admin): Auth OFF - no token needed
+ * 2. Shared agent (multiple admins): Auth ON - token required
+ * 3. Public agent (restricted writes): Auth ON - only admins can add knowledge
+ */
+
+/**
+ * Gets the current auth configuration from runtime settings or environment.
+ */
+export function getAuthConfig(runtime: IAgentRuntime): AuthConfig {
+  // Check runtime settings first (allows per-agent configuration)
+  const runtimeEnabled = (runtime as any).getSetting?.("DATAMIRROR_AUTH_ENABLED");
+  const runtimeToken = (runtime as any).getSetting?.("DATAMIRROR_AUTH_TOKEN");
+
+  // Determine if auth is enabled
+  let enabled = false;
+  if (runtimeEnabled === true || runtimeEnabled === "true") {
+    enabled = true;
+  } else if (runtimeEnabled === false || runtimeEnabled === "false") {
+    enabled = false;
+  } else {
+    // Fall back to environment variable
+    const envEnabled = process.env.DATAMIRROR_AUTH_ENABLED;
+    enabled = envEnabled === "true" || envEnabled === "1";
+  }
+
+  // Get token
+  let token: string | undefined;
+  if (typeof runtimeToken === "string" && runtimeToken.trim()) {
+    token = runtimeToken;
+  } else {
+    token = process.env.DATAMIRROR_AUTH_TOKEN || undefined;
+  }
+
+  return { enabled, token };
+}
+
+/**
+ * Validates the auth token for write operations.
+ *
+ * Returns:
+ * - valid: true if operation should proceed
+ * - authEnabled: true if auth is turned on
+ * - needsToken: true if auth is on but no token was provided (agent should ask)
+ * - error: error message if validation failed
  */
 export function validateToken(
   runtime: IAgentRuntime,
   providedToken: string | undefined
 ): TokenValidationResult {
-  // Get configured token from environment/settings
-  const configuredToken = getConfiguredToken(runtime);
-  const authDisabled = getAuthDisabled(runtime);
+  const config = getAuthConfig(runtime);
 
-  // If auth is explicitly disabled, allow all requests
-  if (authDisabled) {
-    console.debug("[datamirror] Auth disabled via DATAMIRROR_AUTH_DISABLED=true");
-    return { valid: true };
+  // Auth is OFF - allow all operations
+  if (!config.enabled) {
+    return {
+      valid: true,
+      authEnabled: false,
+      needsToken: false,
+    };
   }
 
-  // If no token is configured on server side, allow requests in dev mode
-  // This enables easy local development without auth setup
-  if (!configuredToken) {
-    const isDev = process.env.NODE_ENV !== "production";
-    if (isDev) {
-      console.debug("[datamirror] No auth token configured, allowing in dev mode");
-      return { valid: true };
-    }
+  // Auth is ON - check configuration
+  if (!config.token) {
+    // Auth enabled but no server token configured - this is a misconfiguration
     return {
       valid: false,
+      authEnabled: true,
+      needsToken: false,
       error:
-        "DATAMIRROR_AUTH_TOKEN is not configured. " +
-        "Set this environment variable to enable Datamirror write operations.",
+        "Auth is enabled but DATAMIRROR_AUTH_TOKEN is not set. " +
+        "Please configure the token or disable auth.",
     };
   }
 
-  // Token must be provided if server has a configured token
+  // Auth is ON and configured - check if user provided a token
   if (!providedToken || typeof providedToken !== "string" || providedToken.trim() === "") {
-    // But allow if provided token matches env token (dev convenience)
+    // No token provided - agent should ask for it
     return {
       valid: false,
-      error: "Auth token is required for Datamirror write operations.",
+      authEnabled: true,
+      needsToken: true,
+      error: "This operation requires authentication. Please provide the auth token.",
     };
   }
 
-  // Constant-time comparison to prevent timing attacks
-  if (!constantTimeCompare(providedToken, configuredToken)) {
+  // Validate the provided token
+  if (!constantTimeCompare(providedToken.trim(), config.token)) {
     return {
       valid: false,
-      error: "Invalid auth token.",
+      authEnabled: true,
+      needsToken: false,
+      error: "Invalid auth token. Access denied.",
     };
   }
 
-  return { valid: true };
-}
-
-/**
- * Retrieves the configured auth token from runtime settings or environment.
- */
-function getConfiguredToken(runtime: IAgentRuntime): string | undefined {
-  // Check runtime settings first (allows per-agent configuration)
-  const runtimeSettings = (runtime as any).getSetting?.("DATAMIRROR_AUTH_TOKEN");
-  if (runtimeSettings && typeof runtimeSettings === "string") {
-    return runtimeSettings;
-  }
-
-  // Fall back to environment variable
-  return process.env.DATAMIRROR_AUTH_TOKEN;
-}
-
-/**
- * Checks if auth is disabled via environment variable or settings.
- */
-function getAuthDisabled(runtime: IAgentRuntime): boolean {
-  // Check runtime settings first
-  const runtimeSetting = (runtime as any).getSetting?.("DATAMIRROR_AUTH_DISABLED");
-  if (runtimeSetting === true || runtimeSetting === "true") {
-    return true;
-  }
-
-  // Fall back to environment variable
-  const envSetting = process.env.DATAMIRROR_AUTH_DISABLED;
-  return envSetting === "true" || envSetting === "1";
+  // Token is valid
+  return {
+    valid: true,
+    authEnabled: true,
+    needsToken: false,
+  };
 }
 
 /**
@@ -98,7 +134,6 @@ function getAuthDisabled(runtime: IAgentRuntime): boolean {
  */
 function constantTimeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) {
-    // Still do a comparison to maintain constant time even on length mismatch
     let result = 0;
     for (let i = 0; i < a.length; i++) {
       result |= a.charCodeAt(i) ^ (b.charCodeAt(i % b.length) || 0);
@@ -123,7 +158,10 @@ export function requireValidToken(
 ): void {
   const result = validateToken(runtime, providedToken);
   if (!result.valid) {
-    throw new DatamirrorAuthError(result.error || "Authentication failed.");
+    throw new DatamirrorAuthError(
+      result.error || "Authentication failed.",
+      result.needsToken
+    );
   }
 }
 
@@ -131,8 +169,18 @@ export function requireValidToken(
  * Custom error class for auth failures.
  */
 export class DatamirrorAuthError extends Error {
-  constructor(message: string) {
+  public readonly needsToken: boolean;
+
+  constructor(message: string, needsToken: boolean = false) {
     super(message);
     this.name = "DatamirrorAuthError";
+    this.needsToken = needsToken;
   }
+}
+
+/**
+ * Check if auth is currently enabled (for informational purposes).
+ */
+export function isAuthEnabled(runtime: IAgentRuntime): boolean {
+  return getAuthConfig(runtime).enabled;
 }

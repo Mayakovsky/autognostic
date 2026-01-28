@@ -129,7 +129,7 @@ export async function mirrorDocToKnowledge(
     if (rawUrl !== params.url) {
       try {
         await datamirrorDocumentsRepository.store(runtime, {
-          sourceId: sourceId + "-raw",
+          sourceId: randomUUID(),
           versionId,
           url: rawUrl,
           content,

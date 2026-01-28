@@ -29,7 +29,12 @@ export const MirrorSourceToKnowledgeAction: Action = {
     required: ["sourceUrl", "authToken"],
   },
 
-  validate: async (_runtime: IAgentRuntime, _message: Memory) => true,
+  // Only validate when the message explicitly mentions mirroring/syncing a source — not simple URL adds
+  validate: async (_runtime: IAgentRuntime, message: Memory) => {
+    const text = ((message.content as any)?.text || "").toLowerCase();
+    const mirrorKeywords = /\b(mirror|sync|crawl|discover|ingest\s+source|mirror\s+source|site\s+to\s+knowledge)\b/i;
+    return mirrorKeywords.test(text);
+  },
 
   async handler(
     runtime: IAgentRuntime,
