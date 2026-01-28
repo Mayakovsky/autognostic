@@ -1,5 +1,5 @@
 import {
-  pgTable,
+  pgSchema,
   text,
   boolean,
   timestamp,
@@ -8,7 +8,10 @@ import {
   integer,
 } from "drizzle-orm/pg-core";
 
-export const datamirrorSettings = pgTable("datamirror_settings", {
+// Create dedicated schema for plugin isolation
+const datamirror = pgSchema("datamirror");
+
+export const datamirrorSettings = datamirror.table("settings", {
   agentId: text("agent_id").primaryKey(),
   sizePolicyJson: jsonb("size_policy_json").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -16,7 +19,7 @@ export const datamirrorSettings = pgTable("datamirror_settings", {
 });
 export type DatamirrorSettingsRow = typeof datamirrorSettings.$inferSelect;
 
-export const datamirrorRefreshSettings = pgTable("datamirror_refresh_settings", {
+export const datamirrorRefreshSettings = datamirror.table("refresh_settings", {
   agentId: text("agent_id").primaryKey(),
   refreshPolicyJson: jsonb("refresh_policy_json").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -25,7 +28,7 @@ export const datamirrorRefreshSettings = pgTable("datamirror_refresh_settings", 
 export type DatamirrorRefreshSettingsRow =
   typeof datamirrorRefreshSettings.$inferSelect;
 
-export const datamirrorPreviewCache = pgTable("datamirror_preview_cache", {
+export const datamirrorPreviewCache = datamirror.table("preview_cache", {
   sourceId: text("source_id").primaryKey(),
   previewJson: jsonb("preview_json").notNull(),
   checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
@@ -33,7 +36,7 @@ export const datamirrorPreviewCache = pgTable("datamirror_preview_cache", {
 export type DatamirrorPreviewCacheRow =
   typeof datamirrorPreviewCache.$inferSelect;
 
-export const datamirrorSources = pgTable("datamirror_sources", {
+export const datamirrorSources = datamirror.table("sources", {
   id: text("id").primaryKey(),
   sourceUrl: text("source_url").notNull(),
   description: text("description"),
@@ -43,7 +46,7 @@ export const datamirrorSources = pgTable("datamirror_sources", {
 });
 export type DatamirrorSourceRow = typeof datamirrorSources.$inferSelect;
 
-export const datamirrorVersions = pgTable("datamirror_versions", {
+export const datamirrorVersions = datamirror.table("versions", {
   id: text("id").primaryKey(),
   sourceId: text("source_id")
     .notNull()
@@ -57,7 +60,7 @@ export const datamirrorVersions = pgTable("datamirror_versions", {
 });
 export type DatamirrorVersionRow = typeof datamirrorVersions.$inferSelect;
 
-export const datamirrorKnowledgeLink = pgTable("datamirror_knowledge_link", {
+export const datamirrorKnowledgeLink = datamirror.table("knowledge_link", {
   id: text("id").primaryKey(),
   sourceId: text("source_id")
     .notNull()
@@ -69,7 +72,7 @@ export const datamirrorKnowledgeLink = pgTable("datamirror_knowledge_link", {
 export type DatamirrorKnowledgeLinkRow =
   typeof datamirrorKnowledgeLink.$inferSelect;
 
-export const datamirrorDocuments = pgTable("datamirror_documents", {
+export const datamirrorDocuments = datamirror.table("documents", {
   id: uuid("id").defaultRandom().primaryKey(),
   sourceId: uuid("source_id").notNull(),
   versionId: text("version_id").notNull(),
