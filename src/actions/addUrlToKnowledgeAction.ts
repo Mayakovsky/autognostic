@@ -42,7 +42,14 @@ export const AddUrlToKnowledgeAction: Action = {
       throw err;
     }
 
-    const url = args.url as string;
+    const url = args.url as string | undefined;
+    if (!url) {
+      return {
+        success: false,
+        text: "Missing required parameter: url",
+        data: { error: "missing_url" },
+      };
+    }
     const filename =
       (args.filename as string) || url.split("/").pop() || "document";
     const roomId: any =
