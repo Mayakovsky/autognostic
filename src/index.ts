@@ -9,6 +9,8 @@ import { MirrorSourceToKnowledgeAction } from "./actions/mirrorSourceToKnowledge
 import { SetDatamirrorSizePolicyAction } from "./actions/setDatamirrorSizePolicyAction";
 import { SetDatamirrorRefreshPolicyAction } from "./actions/setDatamirrorRefreshPolicyAction";
 
+import { fullDocumentProvider } from "./providers/fullDocumentProvider";
+
 import { datamirrorSchema } from "./schema";
 
 export const datamirrorPlugin: Plugin = {
@@ -22,7 +24,7 @@ export const datamirrorPlugin: Plugin = {
     SetDatamirrorSizePolicyAction,
     SetDatamirrorRefreshPolicyAction,
   ],
-  providers: [],
+  providers: [fullDocumentProvider],
   schema: datamirrorSchema,
 };
 

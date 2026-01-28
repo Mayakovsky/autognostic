@@ -1,6 +1,7 @@
 import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
 import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
 import { requireValidToken, DatamirrorAuthError } from "../auth/validateToken";
+import { randomUUID } from "crypto";
 
 // Extract URL from message text
 function extractUrlFromText(text: string): string | null {
@@ -76,19 +77,27 @@ export const AddUrlToKnowledgeAction: Action = {
     const roomId: any =
       args.roomId || (runtime as any).defaultRoomId || runtime.agentId;
 
-    await mirrorDocToKnowledge(runtime, {
+    // Generate sourceId and versionId for full document storage
+    const sourceId = randomUUID();
+    const versionId = `v1-${Date.now()}`;
+
+    const result = await mirrorDocToKnowledge(runtime, {
       url,
       filename,
       roomId,
       entityId: runtime.agentId,
       worldId: runtime.agentId,
-      metadata: { addedVia: "ADD_URL_TO_KNOWLEDGE" },
+      metadata: {
+        addedVia: "ADD_URL_TO_KNOWLEDGE",
+        sourceId,
+        versionId,
+      },
     });
 
     return {
       success: true,
-      text: `Added ${url} to Knowledge.`,
-      data: { url, filename, roomId },
+      text: `Added ${url} to Knowledge. Full document archived for direct quotes.`,
+      data: { url, filename, roomId, sourceId, versionId, ...result },
     };
   },
 };
