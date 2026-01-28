@@ -4,6 +4,48 @@ import { HttpService } from "../services/httpService";
 import { randomUUID, createHash } from "crypto";
 import { datamirrorDocumentsRepository } from "../db/datamirrorDocumentsRepository";
 
+/**
+ * Convert URLs to their raw content equivalents.
+ * - GitHub blob URLs → raw.githubusercontent.com
+ * - GitLab blob URLs → raw URLs
+ * - Gist URLs → raw URLs
+ */
+function normalizeToRawUrl(url: string): string {
+  const parsed = new URL(url);
+
+  // GitHub: github.com/:owner/:repo/blob/:branch/:path
+  // → raw.githubusercontent.com/:owner/:repo/:branch/:path
+  if (parsed.hostname === "github.com" || parsed.hostname === "www.github.com") {
+    const match = parsed.pathname.match(/^\/([^/]+)\/([^/]+)\/blob\/(.+)$/);
+    if (match) {
+      const [, owner, repo, rest] = match;
+      return `https://raw.githubusercontent.com/${owner}/${repo}/${rest}`;
+    }
+  }
+
+  // GitHub Gist: gist.github.com/:user/:gistId → raw URL
+  if (parsed.hostname === "gist.github.com") {
+    const match = parsed.pathname.match(/^\/([^/]+)\/([^/]+)\/?$/);
+    if (match) {
+      const [, user, gistId] = match;
+      return `https://gist.githubusercontent.com/${user}/${gistId}/raw`;
+    }
+  }
+
+  // GitLab: gitlab.com/:owner/:repo/-/blob/:branch/:path
+  // → gitlab.com/:owner/:repo/-/raw/:branch/:path
+  if (parsed.hostname === "gitlab.com" || parsed.hostname.includes("gitlab")) {
+    const blobMatch = parsed.pathname.match(/^(.+)\/-\/blob\/(.+)$/);
+    if (blobMatch) {
+      const [, projectPath, rest] = blobMatch;
+      return `https://${parsed.hostname}${projectPath}/-/raw/${rest}`;
+    }
+  }
+
+  // Return original URL if no transformation needed
+  return url;
+}
+
 export interface MirrorDocParams {
   url: string;
   filename: string;
@@ -28,7 +70,9 @@ export async function mirrorDocToKnowledge(
     );
   }
 
-  const res = await http.get(params.url);
+  // Convert GitHub/GitLab blob URLs to raw content URLs
+  const rawUrl = normalizeToRawUrl(params.url);
+  const res = await http.get(rawUrl);
   const contentType =
     params.contentType || res.headers.get("content-type") || "text/plain";
 
@@ -72,6 +116,7 @@ export async function mirrorDocToKnowledge(
     content,
     metadata: {
       sourceUrl: params.url,
+      rawUrl: rawUrl !== params.url ? rawUrl : undefined,
       datamirror: true,
       ...(params.metadata ?? {}),
     },
