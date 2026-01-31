@@ -1,52 +1,41 @@
 import type { IAgentRuntime } from "@elizaos/core";
-import { ReconciliationWorker } from "./ReconciliationWorker";
 import type { SourceConfig } from "./SourceConfig";
-import { DatamirrorRefreshSettingsRepository } from "../db/datamirrorRefreshSettingsRepository";
+import { getScheduledSyncService } from "../services/ScheduledSyncService";
+import { ReconciliationService } from "./ReconciliationService";
 
 export class StartupBootstrapService {
-  private worker: ReconciliationWorker;
-  private refreshRepo: DatamirrorRefreshSettingsRepository;
-
-  constructor(private runtime: IAgentRuntime) {
-    this.worker = new ReconciliationWorker(runtime);
-    this.refreshRepo = new DatamirrorRefreshSettingsRepository(runtime);
-  }
+  constructor(private runtime: IAgentRuntime) {}
 
   async run(sources: SourceConfig[]): Promise<void> {
     if (!sources.length) {
       console.log(
-        "[datamirror] Startup: no sources configured for this agent."
+        "[autognostic] Startup: no sources configured for this agent."
       );
-      return;
     }
 
     console.log(
-      `[datamirror] Startup: Datamirror active for agent ${this.runtime.agentId}. Sources: ${sources
-        .map((s) => s.id)
-        .join(", ")}`
+      `[autognostic] Startup: Autognostic active for agent ${this.runtime.agentId}. ` +
+      `Sources: ${sources.map((s) => s.id).join(", ") || "(none)"}`
     );
 
-    const policy = await this.refreshRepo.getPolicy(this.runtime.agentId);
-    const timeoutMs = policy.startupReconcileTimeoutMs;
-    const kickoff = Date.now();
+    // Start the scheduled sync service (cron-based)
+    const syncService = getScheduledSyncService(this.runtime);
+    await syncService.start();
 
-    console.log(
-      `[datamirror] Startup: scheduling background reconciliation (timeout ${timeoutMs}ms).`
-    );
+    // Check for stale sources and sync immediately if needed
+    await syncService.syncStaleOnStartup();
 
-    setTimeout(() => {
-      const now = Date.now();
-      if (now - kickoff > timeoutMs) {
-        console.warn(
-          `[datamirror] Startup: skipping reconciliation kickoff (startup timeout exceeded).`
-        );
-        return;
-      }
-
-      this.worker.enqueueSources(sources);
-      console.log(
-        "[datamirror] Startup: background reconciliation started."
-      );
-    }, 2000);
+    // Initial reconciliation for any explicitly configured sources
+    if (sources.length > 0) {
+      const reconciler = new ReconciliationService(this.runtime);
+      setTimeout(async () => {
+        try {
+          await reconciler.verifyAndReconcileAll(sources);
+          console.log("[autognostic] Startup: initial reconciliation completed.");
+        } catch (err) {
+          console.error("[autognostic] Startup reconciliation failed:", err);
+        }
+      }, 2000);
+    }
   }
 }

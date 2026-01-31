@@ -1,19 +1,19 @@
 import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
-import { DatamirrorSettingsRepository } from "../db/datamirrorSettingsRepository";
+import { AutognosticSettingsRepository } from "../db/autognosticSettingsRepository";
 import { MIN_AUTO_INGEST_BYTES, DEFAULT_SIZE_POLICY } from "../config/SizePolicy";
-import { requireValidToken, DatamirrorAuthError } from "../auth/validateToken";
+import { requireValidToken, AutognosticAuthError } from "../auth/validateToken";
 
-export const SetDatamirrorSizePolicyAction: Action = {
-  name: "SET_DATAMIRROR_SIZE_POLICY",
+export const SetAutognosticSizePolicyAction: Action = {
+  name: "SET_AUTOGNOSTIC_SIZE_POLICY",
   description:
-    "Configure Datamirror size policy (accepts MB; stores bytes). Requires Datamirror token.",
+    "Configure Autognostic size policy (accepts MB; stores bytes). Requires Autognostic token.",
   parameters: {
     type: "object",
     properties: {
       autoIngestBelowMB: { type: "number", description: "Auto-ingest below size (MB)." },
       maxMBHardLimit: { type: "number", description: "Hard max ingest size (MB)." },
       previewAlways: { type: "boolean", description: "Always show preview before ingest." },
-      authToken: { type: "string", description: "Datamirror auth token for write permissions." },
+      authToken: { type: "string", description: "Autognostic auth token for write permissions." },
     },
     required: ["authToken"],
   },
@@ -31,7 +31,7 @@ export const SetDatamirrorSizePolicyAction: Action = {
     try {
       requireValidToken(runtime, authToken);
     } catch (err) {
-      if (err instanceof DatamirrorAuthError) {
+      if (err instanceof AutognosticAuthError) {
         return {
           success: false,
           text: err.message,
@@ -41,7 +41,7 @@ export const SetDatamirrorSizePolicyAction: Action = {
       throw err;
     }
 
-    const repo = new DatamirrorSettingsRepository(runtime);
+    const repo = new AutognosticSettingsRepository(runtime);
     const current =
       (await repo.getPolicy(runtime.agentId)) ?? DEFAULT_SIZE_POLICY;
 

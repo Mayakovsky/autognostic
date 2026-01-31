@@ -1,6 +1,6 @@
 import type { IAgentRuntime, Memory, Provider, ProviderResult, State } from "@elizaos/core";
-import { datamirrorDocumentsRepository } from "../db/datamirrorDocumentsRepository";
-import { datamirrorDocuments } from "../db/schema";
+import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
+import { autognosticDocuments } from "../db/schema";
 import { getDb } from "../db/getDb";
 import { desc } from "drizzle-orm";
 import { PROVIDER_DEFAULTS } from "../config/constants";
@@ -45,15 +45,15 @@ export const fullDocumentProvider: Provider = {
       const db = await getDb(runtime);
       documentInventory = await db
         .select({
-          url: datamirrorDocuments.url,
-          byteSize: datamirrorDocuments.byteSize,
-          createdAt: datamirrorDocuments.createdAt,
+          url: autognosticDocuments.url,
+          byteSize: autognosticDocuments.byteSize,
+          createdAt: autognosticDocuments.createdAt,
         })
-        .from(datamirrorDocuments)
-        .orderBy(desc(datamirrorDocuments.createdAt))
+        .from(autognosticDocuments)
+        .orderBy(desc(autognosticDocuments.createdAt))
         .limit(PROVIDER_DEFAULTS.MAX_INVENTORY_SIZE);
     } catch (error) {
-      console.error(`[datamirror] Failed to fetch document inventory:`, error);
+      console.error(`[autognostic] Failed to fetch document inventory:`, error);
     }
 
     // Extract URLs from conversation for targeted lookup
@@ -95,7 +95,7 @@ export const fullDocumentProvider: Provider = {
 
     for (const url of uniqueUrls.slice(0, 5)) {
       // Try exact match first
-      let content = await datamirrorDocumentsRepository.getFullContent(runtime, url);
+      let content = await autognosticDocumentsRepository.getFullContent(runtime, url);
 
       // If no match, try to find by partial URL match (filename) in inventory
       if (!content && documentInventory.length > 0) {
@@ -105,7 +105,7 @@ export const fullDocumentProvider: Provider = {
             doc.url.toLowerCase().includes(filename)
           );
           if (partialMatch) {
-            content = await datamirrorDocumentsRepository.getFullContent(runtime, partialMatch.url);
+            content = await autognosticDocumentsRepository.getFullContent(runtime, partialMatch.url);
           }
         }
       }
@@ -118,7 +118,7 @@ export const fullDocumentProvider: Provider = {
     // FALLBACK: If asking for quotes but no URL match, fetch most recent documents' content
     if (isAskingForQuote && matchedDocuments.length === 0 && documentInventory.length > 0) {
       for (const doc of documentInventory.slice(0, PROVIDER_DEFAULTS.MAX_DOCUMENTS_IN_CONTEXT)) {
-        const content = await datamirrorDocumentsRepository.getFullContent(runtime, doc.url);
+        const content = await autognosticDocumentsRepository.getFullContent(runtime, doc.url);
         if (content) {
           matchedDocuments.push({ url: doc.url, content });
         }

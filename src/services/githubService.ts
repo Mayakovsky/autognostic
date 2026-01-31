@@ -3,7 +3,7 @@ import { Octokit } from "@octokit/rest";
 
 /**
  * GithubService
- * - Wraps Octokit for GitHub reads used by datamirror sources.
+ * - Wraps Octokit for GitHub reads used by autognostic sources.
  * - Requires static start() for ElizaOS core 1.6+ service registration.
  * - Uses GITHUB_TOKEN if present; works unauthenticated for public repos (rate-limited).
  */
@@ -24,7 +24,7 @@ export class GithubService extends Service {
     super(runtime);
     const token =
       process.env.GITHUB_TOKEN ||
-      (runtime.character as any)?.settings?.datamirror?.github?.token;
+      (runtime.character as any)?.settings?.autognostic?.github?.token;
 
     this.octokit = new Octokit(token ? { auth: token } : {});
   }

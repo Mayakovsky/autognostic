@@ -1,19 +1,23 @@
 import {
-  datamirrorSettings,
-  datamirrorRefreshSettings,
-  datamirrorPreviewCache,
-  datamirrorSources,
-  datamirrorVersions,
-  datamirrorKnowledgeLink,
-  datamirrorDocuments,
+  autognosticSettings,
+  autognosticRefreshSettings,
+  autognosticPreviewCache,
+  autognosticSources,
+  autognosticVersions,
+  autognosticKnowledgeLink,
+  autognosticDocuments,
+  autognosticSyncConfig,
+  autognosticSyncLog,
 } from "./db/schema";
 
-export const datamirrorSchema = {
-  datamirrorSettings,
-  datamirrorRefreshSettings,
-  datamirrorPreviewCache,
-  datamirrorSources,
-  datamirrorVersions,
-  datamirrorKnowledgeLink,
-  datamirrorDocuments,
+export const autognosticSchema = {
+  autognosticSettings,
+  autognosticRefreshSettings,
+  autognosticPreviewCache,
+  autognosticSources,
+  autognosticVersions,
+  autognosticKnowledgeLink,
+  autognosticDocuments,
+  autognosticSyncConfig,
+  autognosticSyncLog,
 };

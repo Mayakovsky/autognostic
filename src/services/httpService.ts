@@ -24,7 +24,7 @@ export class HttpService extends Service {
   constructor(runtime: IAgentRuntime) {
     super(runtime);
     // Optional per-character tuning
-    const dm = (runtime.character as any)?.settings?.datamirror;
+    const dm = (runtime.character as any)?.settings?.autognostic;
     const http = dm?.http;
     if (typeof http?.timeoutMs === "number") this.defaultTimeoutMs = http.timeoutMs;
     if (typeof http?.userAgent === "string") this.defaultUserAgent = http.userAgent;

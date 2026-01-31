@@ -8,12 +8,12 @@ import {
 } from "./previewSource";
 import type { SourceConfig } from "./SourceConfig";
 
-import { DatamirrorSourcesRepository } from "../db/datamirrorSourcesRepository";
-import { DatamirrorVersionsRepository } from "../db/datamirrorVersionsRepository";
-import { DatamirrorPreviewCacheRepository } from "../db/datamirrorPreviewCacheRepository";
-import { DatamirrorRefreshSettingsRepository } from "../db/datamirrorRefreshSettingsRepository";
-import { DatamirrorKnowledgeLinkRepository } from "../db/datamirrorKnowledgeLinkRepository";
-import { DatamirrorSettingsRepository } from "../db/datamirrorSettingsRepository";
+import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository";
+import { AutognosticVersionsRepository } from "../db/autognosticVersionsRepository";
+import { AutognosticPreviewCacheRepository } from "../db/autognosticPreviewCacheRepository";
+import { AutognosticRefreshSettingsRepository } from "../db/autognosticRefreshSettingsRepository";
+import { AutognosticKnowledgeLinkRepository } from "../db/autognosticKnowledgeLinkRepository";
+import { AutognosticSettingsRepository } from "../db/autognosticSettingsRepository";
 import { DEFAULT_SIZE_POLICY } from "../config/SizePolicy";
 
 import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
@@ -59,20 +59,20 @@ export interface ReconciliationResult {
 
 export class ReconciliationService {
   private versionResolver = new VersionResolver();
-  private sourcesRepo: DatamirrorSourcesRepository;
-  private versionsRepo: DatamirrorVersionsRepository;
-  private previewCacheRepo: DatamirrorPreviewCacheRepository;
-  private refreshRepo: DatamirrorRefreshSettingsRepository;
-  private knowledgeLinkRepo: DatamirrorKnowledgeLinkRepository;
-  private settingsRepo: DatamirrorSettingsRepository;
+  private sourcesRepo: AutognosticSourcesRepository;
+  private versionsRepo: AutognosticVersionsRepository;
+  private previewCacheRepo: AutognosticPreviewCacheRepository;
+  private refreshRepo: AutognosticRefreshSettingsRepository;
+  private knowledgeLinkRepo: AutognosticKnowledgeLinkRepository;
+  private settingsRepo: AutognosticSettingsRepository;
 
   constructor(private runtime: IAgentRuntime) {
-    this.sourcesRepo = new DatamirrorSourcesRepository(runtime);
-    this.versionsRepo = new DatamirrorVersionsRepository(runtime);
-    this.previewCacheRepo = new DatamirrorPreviewCacheRepository(runtime);
-    this.refreshRepo = new DatamirrorRefreshSettingsRepository(runtime);
-    this.knowledgeLinkRepo = new DatamirrorKnowledgeLinkRepository(runtime);
-    this.settingsRepo = new DatamirrorSettingsRepository(runtime);
+    this.sourcesRepo = new AutognosticSourcesRepository(runtime);
+    this.versionsRepo = new AutognosticVersionsRepository(runtime);
+    this.previewCacheRepo = new AutognosticPreviewCacheRepository(runtime);
+    this.refreshRepo = new AutognosticRefreshSettingsRepository(runtime);
+    this.knowledgeLinkRepo = new AutognosticKnowledgeLinkRepository(runtime);
+    this.settingsRepo = new AutognosticSettingsRepository(runtime);
   }
 
   async verifyAndReconcileAll(sources: SourceConfig[]): Promise<ReconciliationResult[]> {
@@ -97,7 +97,7 @@ export class ReconciliationService {
     );
 
     console.log(
-      `[datamirror] Checking source ${source.id} (${source.sourceUrl}), kind=${classified.kind}`
+      `[autognostic] Checking source ${source.id} (${source.sourceUrl}), kind=${classified.kind}`
     );
 
     const now = new Date();
@@ -111,14 +111,14 @@ export class ReconciliationService {
     ) {
       preview = cached.preview;
       console.log(
-        `[datamirror] Using cached preview for ${source.id} (age ${
+        `[autognostic] Using cached preview for ${source.id} (age ${
           (now.getTime() - cached.checkedAt.getTime()) / 1000
         }s)`
       );
     } else {
       preview = await previewSourceFiles(this.runtime, source.id, discovery);
       await this.previewCacheRepo.set(source.id, preview, now);
-      console.log(`[datamirror] Refreshed preview for ${source.id}`);
+      console.log(`[autognostic] Refreshed preview for ${source.id}`);
     }
 
     // Enforce size policy during background reconciliation
@@ -127,7 +127,7 @@ export class ReconciliationService {
       const totalMB = (preview.totalBytes / 1024 / 1024).toFixed(2);
       const hardLimitMB = (sizePolicy.maxBytesHardLimit / 1024 / 1024).toFixed(2);
       console.warn(
-        `[datamirror] Source ${source.id} exceeds hard size limit (${totalMB} MB > ${hardLimitMB} MB), skipping reconciliation`
+        `[autognostic] Source ${source.id} exceeds hard size limit (${totalMB} MB > ${hardLimitMB} MB), skipping reconciliation`
       );
       return {
         sourceId: source.id,
@@ -150,7 +150,7 @@ export class ReconciliationService {
       if (!existingVersion) {
         // Never reconciled before and above auto-ingest threshold - skip
         console.warn(
-          `[datamirror] Source ${source.id} exceeds auto-ingest threshold (${totalMB} MB > ${autoIngestMB} MB) ` +
+          `[autognostic] Source ${source.id} exceeds auto-ingest threshold (${totalMB} MB > ${autoIngestMB} MB) ` +
             `and has no prior version. Use MIRROR_SOURCE_TO_KNOWLEDGE action with confirmLargeIngest to initialize.`
         );
         return {
@@ -163,7 +163,7 @@ export class ReconciliationService {
       }
       // Has prior version - allow update even if above threshold (user confirmed previously)
       console.log(
-        `[datamirror] Source ${source.id} exceeds auto-ingest threshold but has prior version, proceeding with update`
+        `[autognostic] Source ${source.id} exceeds auto-ingest threshold but has prior version, proceeding with update`
       );
     }
 
@@ -177,7 +177,7 @@ export class ReconciliationService {
 
     if (!needsUpdate) {
       console.log(
-        `[datamirror] ${source.id} up-to-date @ ${remoteVersionId}`
+        `[autognostic] ${source.id} up-to-date @ ${remoteVersionId}`
       );
       return {
         sourceId: source.id,
@@ -189,7 +189,7 @@ export class ReconciliationService {
     }
 
     console.log(
-      `[datamirror] ${source.id} outdated → reconciling to ${remoteVersionId}`
+      `[autognostic] ${source.id} outdated → reconciling to ${remoteVersionId}`
     );
 
     await this.versionsRepo.createStaging(source.id, remoteVersionId);
@@ -198,7 +198,7 @@ export class ReconciliationService {
       await this.reconcileSourceVersion(source, preview, remoteVersionId);
       await this.versionsRepo.markActive(source.id, remoteVersionId);
       console.log(
-        `[datamirror] ${source.id} reconciled to ${remoteVersionId}`
+        `[autognostic] ${source.id} reconciled to ${remoteVersionId}`
       );
       return {
         sourceId: source.id,
@@ -209,7 +209,7 @@ export class ReconciliationService {
       };
     } catch (err) {
       console.error(
-        `[datamirror] Reconciliation failed for ${source.id} @ ${remoteVersionId}`,
+        `[autognostic] Reconciliation failed for ${source.id} @ ${remoteVersionId}`,
         err
       );
       await this.versionsRepo.markFailed(
@@ -246,7 +246,7 @@ export class ReconciliationService {
     const files = await discovery.list();
     if (!files.length) {
       console.warn(
-        `[datamirror] No files discovered for ${source.id} during reconcile`
+        `[autognostic] No files discovered for ${source.id} during reconcile`
       );
       return;
     }
@@ -264,8 +264,8 @@ export class ReconciliationService {
           entityId,
           worldId: this.runtime.agentId,
           metadata: {
-            datamirrorSourceId: source.id,
-            datamirrorVersionId: versionId,
+            autognosticSourceId: source.id,
+            autognosticVersionId: versionId,
           },
         });
 
@@ -276,7 +276,7 @@ export class ReconciliationService {
         });
       } catch (err) {
         console.warn(
-          `[datamirror] Failed to ingest ${f.url} for ${source.id} @ ${versionId}, skipping`,
+          `[autognostic] Failed to ingest ${f.url} for ${source.id} @ ${versionId}, skipping`,
           err
         );
       }

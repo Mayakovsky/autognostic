@@ -1,5 +1,5 @@
 import type { IAgentRuntime } from "@elizaos/core";
-import { datamirrorDocumentsRepository } from "../db/datamirrorDocumentsRepository";
+import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
 
 export interface QuoteResult {
   found: boolean;
@@ -14,7 +14,7 @@ export async function getExactQuote(
   url: string,
   searchText: string
 ): Promise<QuoteResult> {
-  const content = await datamirrorDocumentsRepository.getFullContent(
+  const content = await autognosticDocumentsRepository.getFullContent(
     runtime,
     url
   );
@@ -53,7 +53,7 @@ export async function getLineContent(
   url: string,
   lineNumber: number
 ): Promise<string | null> {
-  const content = await datamirrorDocumentsRepository.getFullContent(
+  const content = await autognosticDocumentsRepository.getFullContent(
     runtime,
     url
   );
@@ -74,5 +74,5 @@ export async function getFullDocument(
   runtime: IAgentRuntime,
   url: string
 ): Promise<string | null> {
-  return datamirrorDocumentsRepository.getFullContent(runtime, url);
+  return autognosticDocumentsRepository.getFullContent(runtime, url);
 }

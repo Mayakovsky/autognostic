@@ -2,21 +2,21 @@ import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core"
 import { ReconciliationService } from "../orchestrator/ReconciliationService";
 import { previewSourceFiles } from "../orchestrator/previewSource";
 import { createDiscoveryForRawUrl } from "../publicspace/discoveryFactory";
-import { DatamirrorSettingsRepository } from "../db/datamirrorSettingsRepository";
+import { AutognosticSettingsRepository } from "../db/autognosticSettingsRepository";
 import { DEFAULT_SIZE_POLICY } from "../config/SizePolicy";
 import type { SourceConfig } from "../orchestrator/SourceConfig";
-import { requireValidToken, DatamirrorAuthError } from "../auth/validateToken";
+import { requireValidToken, AutognosticAuthError } from "../auth/validateToken";
 
 export const MirrorSourceToKnowledgeAction: Action = {
   name: "MIRROR_SOURCE_TO_KNOWLEDGE",
   description:
-    "Discover and mirror a docs source (site or repo) into Knowledge (requires Datamirror token).",
+    "Discover and mirror a docs source (site or repo) into Knowledge (requires Autognostic token).",
   parameters: {
     type: "object",
     properties: {
       sourceId: { type: "string", description: "Optional ID for the source." },
       sourceUrl: { type: "string", description: "Root URL of the source to mirror." },
-      authToken: { type: "string", description: "Datamirror auth token for write permissions." },
+      authToken: { type: "string", description: "Autognostic auth token for write permissions." },
       skipPreview: {
         type: "boolean",
         description: "Skip size preview check (only allowed if under auto-ingest threshold).",
@@ -47,7 +47,7 @@ export const MirrorSourceToKnowledgeAction: Action = {
     try {
       requireValidToken(runtime, authToken);
     } catch (err) {
-      if (err instanceof DatamirrorAuthError) {
+      if (err instanceof AutognosticAuthError) {
         return {
           success: false,
           text: err.message,
@@ -63,7 +63,7 @@ export const MirrorSourceToKnowledgeAction: Action = {
     const confirmLargeIngest = args.confirmLargeIngest === true;
 
     // Get size policy
-    const settingsRepo = new DatamirrorSettingsRepository(runtime);
+    const settingsRepo = new AutognosticSettingsRepository(runtime);
     const sizePolicy = (await settingsRepo.getPolicy(runtime.agentId)) ?? DEFAULT_SIZE_POLICY;
 
     // Create discovery to get preview
@@ -81,7 +81,7 @@ export const MirrorSourceToKnowledgeAction: Action = {
         text:
           `Source ${sourceId} exceeds hard size limit. ` +
           `Total: ${totalMB} MB, Hard limit: ${hardLimitMB} MB. ` +
-          `Increase the hard limit using SET_DATAMIRROR_SIZE_POLICY if needed.`,
+          `Increase the hard limit using SET_AUTOGNOSTIC_SIZE_POLICY if needed.`,
         data: {
           error: "exceeds_hard_limit",
           sourceId,

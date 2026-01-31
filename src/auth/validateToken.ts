@@ -13,7 +13,7 @@ export interface AuthConfig {
 }
 
 /**
- * DATAMIRROR AUTH SCHEMA
+ * AUTOGNOSTIC AUTH SCHEMA
  * ======================
  *
  * Design Philosophy:
@@ -23,8 +23,8 @@ export interface AuthConfig {
  * - Agent will ASK for token when auth is enabled but token not provided
  *
  * Configuration:
- * - DATAMIRROR_AUTH_ENABLED: "true" | "false" (default: false)
- * - DATAMIRROR_AUTH_TOKEN: string (the password, only checked when enabled)
+ * - AUTOGNOSTIC_AUTH_ENABLED: "true" | "false" (default: false)
+ * - AUTOGNOSTIC_AUTH_TOKEN: string (the password, only checked when enabled)
  *
  * Use Cases:
  * 1. Personal agent (single admin): Auth OFF - no token needed
@@ -37,8 +37,8 @@ export interface AuthConfig {
  */
 export function getAuthConfig(runtime: IAgentRuntime): AuthConfig {
   // Check runtime settings first (allows per-agent configuration)
-  const runtimeEnabled = (runtime as any).getSetting?.("DATAMIRROR_AUTH_ENABLED");
-  const runtimeToken = (runtime as any).getSetting?.("DATAMIRROR_AUTH_TOKEN");
+  const runtimeEnabled = (runtime as any).getSetting?.("AUTOGNOSTIC_AUTH_ENABLED");
+  const runtimeToken = (runtime as any).getSetting?.("AUTOGNOSTIC_AUTH_TOKEN");
 
   // Determine if auth is enabled
   let enabled = false;
@@ -48,7 +48,7 @@ export function getAuthConfig(runtime: IAgentRuntime): AuthConfig {
     enabled = false;
   } else {
     // Fall back to environment variable
-    const envEnabled = process.env.DATAMIRROR_AUTH_ENABLED;
+    const envEnabled = process.env.AUTOGNOSTIC_AUTH_ENABLED;
     enabled = envEnabled === "true" || envEnabled === "1";
   }
 
@@ -57,7 +57,7 @@ export function getAuthConfig(runtime: IAgentRuntime): AuthConfig {
   if (typeof runtimeToken === "string" && runtimeToken.trim()) {
     token = runtimeToken;
   } else {
-    token = process.env.DATAMIRROR_AUTH_TOKEN || undefined;
+    token = process.env.AUTOGNOSTIC_AUTH_TOKEN || undefined;
   }
 
   return { enabled, token };
@@ -95,7 +95,7 @@ export function validateToken(
       authEnabled: true,
       needsToken: false,
       error:
-        "Auth is enabled but DATAMIRROR_AUTH_TOKEN is not set. " +
+        "Auth is enabled but AUTOGNOSTIC_AUTH_TOKEN is not set. " +
         "Please configure the token or disable auth.",
     };
   }
@@ -158,7 +158,7 @@ export function requireValidToken(
 ): void {
   const result = validateToken(runtime, providedToken);
   if (!result.valid) {
-    throw new DatamirrorAuthError(
+    throw new AutognosticAuthError(
       result.error || "Authentication failed.",
       result.needsToken
     );
@@ -168,12 +168,12 @@ export function requireValidToken(
 /**
  * Custom error class for auth failures.
  */
-export class DatamirrorAuthError extends Error {
+export class AutognosticAuthError extends Error {
   public readonly needsToken: boolean;
 
   constructor(message: string, needsToken: boolean = false) {
     super(message);
-    this.name = "DatamirrorAuthError";
+    this.name = "AutognosticAuthError";
     this.needsToken = needsToken;
   }
 }

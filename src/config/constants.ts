@@ -1,12 +1,12 @@
 /**
- * Centralized constants for plugin-datamirror
+ * Centralized constants for plugin-autognostic
  * Avoids magic numbers scattered throughout codebase
  */
 
 export const HTTP_DEFAULTS = {
   TIMEOUT_MS: 20_000,
   MAX_CONTENT_BYTES: 2_000_000,
-  USER_AGENT: "elizaos-plugin-datamirror/1.x (+https://elizaos.ai)",
+  USER_AGENT: "elizaos-plugin-autognostic/1.x (+https://elizaos.ai)",
 } as const;
 
 export const RECONCILIATION_DEFAULTS = {

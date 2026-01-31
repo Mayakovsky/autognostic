@@ -2,40 +2,52 @@ import type { Plugin } from "@elizaos/core";
 
 import { HttpService } from "./services/httpService";
 import { GithubService } from "./services/githubService";
-import { DatamirrorService } from "./services/datamirrorService";
+import { AutognosticService } from "./services/AutognosticService";
 
 import { AddUrlToKnowledgeAction } from "./actions/addUrlToKnowledgeAction";
 import { MirrorSourceToKnowledgeAction } from "./actions/mirrorSourceToKnowledgeAction";
-import { SetDatamirrorSizePolicyAction } from "./actions/setDatamirrorSizePolicyAction";
-import { SetDatamirrorRefreshPolicyAction } from "./actions/setDatamirrorRefreshPolicyAction";
+import { SetAutognosticSizePolicyAction } from "./actions/setAutognosticSizePolicyAction";
 import { ListSourcesAction } from "./actions/listSourcesAction";
 import { RemoveSourceAction } from "./actions/removeSourceAction";
 import { GetQuoteAction } from "./actions/getQuoteAction";
+import { ListDocumentsAction } from "./actions/listDocumentsAction";
+import { RemoveDocumentAction } from "./actions/removeDocumentAction";
+import { SetVersionTrackingAction } from "./actions/setVersionTrackingAction";
+import { RefreshSourceAction } from "./actions/refreshSourceAction";
 
 import { fullDocumentProvider } from "./providers/fullDocumentProvider";
+import { knowledgeSummaryProvider } from "./providers/knowledgeSummaryProvider";
 
-import { datamirrorSchema } from "./schema";
+import { autognosticSchema } from "./schema";
 
-export const datamirrorPlugin: Plugin = {
-  name: "@elizaos/plugin-datamirror",
+export const autognosticPlugin: Plugin = {
+  name: "@elizaos/plugin-autognostic",
   description:
-    "Mirrors external sources into Knowledge with versioning and policy controls (size limits, refresh rules, and reconciliation).",
-  services: [HttpService, GithubService, DatamirrorService],
+    "Autognostic - Conversational Automated Knowledge Control. " +
+    "Enables agents to build, manage, and query their own knowledge base through conversation.",
+  services: [HttpService, GithubService, AutognosticService],
   actions: [
     AddUrlToKnowledgeAction,
     MirrorSourceToKnowledgeAction,
-    SetDatamirrorSizePolicyAction,
-    SetDatamirrorRefreshPolicyAction,
     ListSourcesAction,
-    RemoveSourceAction,
+    ListDocumentsAction,
     GetQuoteAction,
+    RemoveSourceAction,
+    RemoveDocumentAction,
+    SetAutognosticSizePolicyAction,
+    SetVersionTrackingAction,
+    RefreshSourceAction,
   ],
-  providers: [fullDocumentProvider],
-  schema: datamirrorSchema,
+  providers: [knowledgeSummaryProvider, fullDocumentProvider],
+  schema: autognosticSchema,
 };
 
-export default datamirrorPlugin;
+export default autognosticPlugin;
 
+// Re-exports
+export { removeFromKnowledge, removeDocumentByUrl } from "./integration/removeFromKnowledge";
+export { getScientificPaperDetector } from "./services/ScientificPaperDetector";
+export { getScheduledSyncService } from "./services/ScheduledSyncService";
 export {
   getExactQuote,
   getLineContent,

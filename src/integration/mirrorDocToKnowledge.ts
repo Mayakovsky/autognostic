@@ -2,7 +2,7 @@ import type { IAgentRuntime, UUID } from "@elizaos/core";
 import type { KnowledgeService } from "@elizaos/plugin-knowledge";
 import { HttpService } from "../services/httpService";
 import { randomUUID, createHash } from "crypto";
-import { datamirrorDocumentsRepository } from "../db/datamirrorDocumentsRepository";
+import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
 import { withRetry } from "../utils/retry";
 
 /**
@@ -89,7 +89,7 @@ export async function mirrorDocToKnowledge(
       {
         attempts: 3,
         onRetry: (err, attempt) => {
-          console.warn(`[datamirror] Retry ${attempt} for ${rawUrl}: ${err.message}`);
+          console.warn(`[autognostic] Retry ${attempt} for ${rawUrl}: ${err.message}`);
         },
       }
     );
@@ -99,7 +99,7 @@ export async function mirrorDocToKnowledge(
     // Warn if we got HTML when expecting text (but not for .html files)
     if (result.isHtml && !rawUrl.toLowerCase().endsWith(".html") && !rawUrl.toLowerCase().endsWith(".htm")) {
       console.warn(
-        `[datamirror] WARNING: Received HTML content from ${rawUrl} - ` +
+        `[autognostic] WARNING: Received HTML content from ${rawUrl} - ` +
         `the URL may be a webpage wrapper instead of raw content. ` +
         `Original URL: ${params.url}`
       );
@@ -111,7 +111,7 @@ export async function mirrorDocToKnowledge(
       {
         attempts: 3,
         onRetry: (err, attempt) => {
-          console.warn(`[datamirror] Retry ${attempt} for ${rawUrl}: ${err.message}`);
+          console.warn(`[autognostic] Retry ${attempt} for ${rawUrl}: ${err.message}`);
         },
       }
     );
@@ -132,7 +132,7 @@ export async function mirrorDocToKnowledge(
     const contentHash = createHash("sha256").update(content).digest("hex");
 
     // Store with original URL (what user likely mentions in conversation)
-    await datamirrorDocumentsRepository.store(runtime, {
+    await autognosticDocumentsRepository.store(runtime, {
       sourceId,
       versionId,
       url: params.url,
@@ -145,7 +145,7 @@ export async function mirrorDocToKnowledge(
     // Also store with raw URL if different (for flexible lookup)
     if (rawUrl !== params.url) {
       try {
-        await datamirrorDocumentsRepository.store(runtime, {
+        await autognosticDocumentsRepository.store(runtime, {
           sourceId: randomUUID(),
           versionId,
           url: rawUrl,
@@ -156,7 +156,7 @@ export async function mirrorDocToKnowledge(
         });
       } catch (err) {
         // Ignore duplicate key errors - rawUrl might already exist
-        console.debug(`[datamirror] Could not store raw URL entry:`, err);
+        console.debug(`[autognostic] Could not store raw URL entry:`, err);
       }
     }
   }
@@ -175,7 +175,7 @@ export async function mirrorDocToKnowledge(
     metadata: {
       sourceUrl: params.url,
       rawUrl: rawUrl !== params.url ? rawUrl : undefined,
-      datamirror: true,
+      autognostic: true,
       ...(params.metadata ?? {}),
     },
   });

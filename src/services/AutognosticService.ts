@@ -3,22 +3,22 @@ import { Service, type IAgentRuntime } from "@elizaos/core";
 import { StartupBootstrapService } from "../orchestrator/StartupBootstrapService";
 import type { SourceConfig } from "../orchestrator/SourceConfig";
 
-import { DatamirrorSettingsRepository } from "../db/datamirrorSettingsRepository";
-import { DatamirrorRefreshSettingsRepository } from "../db/datamirrorRefreshSettingsRepository";
+import { AutognosticSettingsRepository } from "../db/autognosticSettingsRepository";
+import { AutognosticRefreshSettingsRepository } from "../db/autognosticRefreshSettingsRepository";
 
 import {
   DEFAULT_SIZE_POLICY,
-  type DatamirrorSizePolicy,
+  type AutognosticSizePolicy,
 } from "../config/SizePolicy";
 
 import {
   DEFAULT_REFRESH_POLICY,
-  type DatamirrorRefreshPolicy,
+  type AutognosticRefreshPolicy,
 } from "../config/RefreshPolicy";
 
 /**
- * DatamirrorService
- * - Owns “startup wiring” for datamirror:
+ * AutognosticService
+ * - Owns “startup wiring” for autognostic:
  *   - loads character settings
  *   - normalizes policy inputs (MB/min/seconds → bytes/ms)
  *   - persists to SQL via repos
@@ -29,18 +29,18 @@ import {
  *   - capabilityDescription
  *   - stop()
  */
-export class DatamirrorService extends Service {
-  static readonly serviceType = "datamirror";
+export class AutognosticService extends Service {
+  static readonly serviceType = "autognostic";
 
   override capabilityDescription =
     "Mirrors external sources into Knowledge with persisted size/refresh policies and startup reconciliation.";
 
-  private settingsRepo: DatamirrorSettingsRepository;
-  private refreshRepo: DatamirrorRefreshSettingsRepository;
+  private settingsRepo: AutognosticSettingsRepository;
+  private refreshRepo: AutognosticRefreshSettingsRepository;
 
   /** Required by ElizaOS core (service registration). */
-  static async start(runtime: IAgentRuntime): Promise<DatamirrorService> {
-    const svc = new DatamirrorService(runtime);
+  static async start(runtime: IAgentRuntime): Promise<AutognosticService> {
+    const svc = new AutognosticService(runtime);
     // Run initialization during service start so the plugin is operational on boot.
     await svc.initialize(runtime);
     return svc;
@@ -48,12 +48,15 @@ export class DatamirrorService extends Service {
 
   constructor(runtime: IAgentRuntime) {
     super(runtime);
-    this.settingsRepo = new DatamirrorSettingsRepository(runtime);
-    this.refreshRepo = new DatamirrorRefreshSettingsRepository(runtime);
+    this.settingsRepo = new AutognosticSettingsRepository(runtime);
+    this.refreshRepo = new AutognosticRefreshSettingsRepository(runtime);
   }
 
   override async stop(): Promise<void> {
-    // If you add timers/queues later, shut them down here.
+    // Stop the scheduled sync service if running
+    const { getScheduledSyncService } = await import("./ScheduledSyncService");
+    const syncService = getScheduledSyncService(this.runtime);
+    await syncService.stop();
   }
 
   /**
@@ -62,7 +65,7 @@ export class DatamirrorService extends Service {
    */
   async initialize(runtime: IAgentRuntime): Promise<void> {
     const charSettings = (runtime.character as any)?.settings ?? {};
-    const dmSettings: any = charSettings.datamirror ?? {};
+    const dmSettings: any = charSettings.autognostic ?? {};
 
     // ----- Sources (what to mirror)
     const sources: SourceConfig[] =
@@ -94,11 +97,11 @@ export class DatamirrorService extends Service {
    *  - preferred: bytes fields (autoIngestBelowBytes, maxBytesHardLimit)
    *  - back-compat/human: MB fields (autoIngestBelowMB, maxMBHardLimit)
    */
-  mergeSizePolicy(input?: Partial<DatamirrorSizePolicy> & Record<string, any>): DatamirrorSizePolicy {
+  mergeSizePolicy(input?: Partial<AutognosticSizePolicy> & Record<string, any>): AutognosticSizePolicy {
     const user: any = input ?? {};
 
     // Start from defaults, then overlay.
-    const merged: DatamirrorSizePolicy = {
+    const merged: AutognosticSizePolicy = {
       ...DEFAULT_SIZE_POLICY,
       ...(user ?? {}),
     };
@@ -129,11 +132,11 @@ export class DatamirrorService extends Service {
    *  - back-compat/human: minutes/seconds fields (previewCacheTtlMinutes, reconcileCooldownMinutes, startupTimeoutSeconds)
    */
   mergeRefreshPolicy(
-    input?: Partial<DatamirrorRefreshPolicy> & Record<string, any>
-  ): DatamirrorRefreshPolicy {
+    input?: Partial<AutognosticRefreshPolicy> & Record<string, any>
+  ): AutognosticRefreshPolicy {
     const user: any = input ?? {};
 
-    const merged: DatamirrorRefreshPolicy = {
+    const merged: AutognosticRefreshPolicy = {
       ...DEFAULT_REFRESH_POLICY,
       ...(user ?? {}),
     };

@@ -1,6 +1,6 @@
 import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
 import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
-import { validateToken, isAuthEnabled, DatamirrorAuthError } from "../auth/validateToken";
+import { validateToken, isAuthEnabled, AutognosticAuthError } from "../auth/validateToken";
 import { randomUUID } from "crypto";
 
 // Extract URL from message text

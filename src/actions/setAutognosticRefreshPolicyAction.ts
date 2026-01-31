@@ -1,12 +1,12 @@
 import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
-import { DatamirrorRefreshSettingsRepository } from "../db/datamirrorRefreshSettingsRepository";
+import { AutognosticRefreshSettingsRepository } from "../db/autognosticRefreshSettingsRepository";
 import { DEFAULT_REFRESH_POLICY } from "../config/RefreshPolicy";
-import { requireValidToken, DatamirrorAuthError } from "../auth/validateToken";
+import { requireValidToken, AutognosticAuthError } from "../auth/validateToken";
 
-export const SetDatamirrorRefreshPolicyAction: Action = {
-  name: "SET_DATAMIRROR_REFRESH_POLICY",
+export const SetAutognosticRefreshPolicyAction: Action = {
+  name: "SET_AUTOGNOSTIC_REFRESH_POLICY",
   description:
-    "Configure Datamirror refresh policy (accepts minutes/seconds; stores ms). Requires Datamirror token.",
+    "Configure Autognostic refresh policy (accepts minutes/seconds; stores ms). Requires Autognostic token.",
   parameters: {
     type: "object",
     properties: {
@@ -14,7 +14,7 @@ export const SetDatamirrorRefreshPolicyAction: Action = {
       reconcileCooldownMinutes: { type: "number", description: "Cooldown between reconciles (minutes)." },
       maxConcurrentReconciles: { type: "number", description: "Max concurrent reconciles." },
       startupTimeoutSeconds: { type: "number", description: "Startup reconcile timeout (seconds)." },
-      authToken: { type: "string", description: "Datamirror auth token for write permissions." },
+      authToken: { type: "string", description: "Autognostic auth token for write permissions." },
     },
     required: ["authToken"],
   },
@@ -32,7 +32,7 @@ export const SetDatamirrorRefreshPolicyAction: Action = {
     try {
       requireValidToken(runtime, authToken);
     } catch (err) {
-      if (err instanceof DatamirrorAuthError) {
+      if (err instanceof AutognosticAuthError) {
         return {
           success: false,
           text: err.message,
@@ -42,7 +42,7 @@ export const SetDatamirrorRefreshPolicyAction: Action = {
       throw err;
     }
 
-    const repo = new DatamirrorRefreshSettingsRepository(runtime);
+    const repo = new AutognosticRefreshSettingsRepository(runtime);
     const current =
       (await repo.getPolicy(runtime.agentId)) ?? DEFAULT_REFRESH_POLICY;
 

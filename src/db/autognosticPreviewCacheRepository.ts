@@ -1,13 +1,13 @@
 import type { IAgentRuntime } from "@elizaos/core";
 import { eq } from "drizzle-orm";
 import {
-  datamirrorPreviewCache,
-  type DatamirrorPreviewCacheRow,
+  autognosticPreviewCache,
+  type AutognosticPreviewCacheRow,
 } from "./schema";
 import type { SourcePreview } from "../orchestrator/previewSource";
 import { getDb } from "./getDb";
 
-export class DatamirrorPreviewCacheRepository {
+export class AutognosticPreviewCacheRepository {
   constructor(private runtime: IAgentRuntime) {}
 
   async get(sourceId: string): Promise<{
@@ -16,10 +16,10 @@ export class DatamirrorPreviewCacheRepository {
     checkedAt: Date;
   } | null> {
     const db = await getDb(this.runtime);
-    const rows: DatamirrorPreviewCacheRow[] = await db
+    const rows: AutognosticPreviewCacheRow[] = await db
       .select()
-      .from(datamirrorPreviewCache)
-      .where(eq(datamirrorPreviewCache.sourceId, sourceId))
+      .from(autognosticPreviewCache)
+      .where(eq(autognosticPreviewCache.sourceId, sourceId))
       .limit(1);
 
     const row = rows[0];
@@ -34,23 +34,23 @@ export class DatamirrorPreviewCacheRepository {
 
   async set(sourceId: string, preview: SourcePreview, checkedAt: Date): Promise<void> {
     const db = await getDb(this.runtime);
-    const existingRows: DatamirrorPreviewCacheRow[] = await db
+    const existingRows: AutognosticPreviewCacheRow[] = await db
       .select()
-      .from(datamirrorPreviewCache)
-      .where(eq(datamirrorPreviewCache.sourceId, sourceId))
+      .from(autognosticPreviewCache)
+      .where(eq(autognosticPreviewCache.sourceId, sourceId))
       .limit(1);
 
     if (!existingRows[0]) {
-      await db.insert(datamirrorPreviewCache).values({
+      await db.insert(autognosticPreviewCache).values({
         sourceId,
         previewJson: preview,
         checkedAt,
       });
     } else {
       await db
-        .update(datamirrorPreviewCache)
+        .update(autognosticPreviewCache)
         .set({ previewJson: preview, checkedAt })
-        .where(eq(datamirrorPreviewCache.sourceId, sourceId));
+        .where(eq(autognosticPreviewCache.sourceId, sourceId));
     }
   }
 }
