@@ -60,7 +60,7 @@ export const fullDocumentProvider: Provider = {
     const urlsToCheck: string[] = [];
 
     // Check current message
-    const urlMatches = messageText.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi);
+    const urlMatches = messageText.match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/gi);
     if (urlMatches) {
       urlsToCheck.push(...urlMatches);
     }
@@ -70,7 +70,7 @@ export const fullDocumentProvider: Provider = {
       const recentText = typeof state.recentMessages === "string"
         ? state.recentMessages
         : JSON.stringify(state.recentMessages);
-      const recentUrlMatches = recentText.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi);
+      const recentUrlMatches = recentText.match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/gi);
       if (recentUrlMatches) {
         urlsToCheck.push(...recentUrlMatches);
       }
@@ -81,7 +81,7 @@ export const fullDocumentProvider: Provider = {
       const knowledgeText = typeof state.knowledge === "string"
         ? state.knowledge
         : JSON.stringify(state.knowledge);
-      const knowledgeUrlMatches = knowledgeText.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi);
+      const knowledgeUrlMatches = knowledgeText.match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/gi);
       if (knowledgeUrlMatches) {
         urlsToCheck.push(...knowledgeUrlMatches);
       }

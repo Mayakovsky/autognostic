@@ -1,18 +1,21 @@
 import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
 import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
-import { validateToken, isAuthEnabled, AutognosticAuthError } from "../auth/validateToken";
+import { validateToken, isAuthEnabled } from "../auth/validateToken";
 import { randomUUID } from "crypto";
+import { getScientificPaperDetector } from "../services/ScientificPaperDetector";
+import { createScientificPaperHandler } from "../services/ScientificPaperHandler";
+import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository";
 
 // Extract URL from message text
 // Supports both full URLs (https://example.com/...) and bare hostnames (example.com/...)
 function extractUrlFromText(text: string): string | null {
   // First try full URLs with protocol
-  const fullUrlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
+  const fullUrlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
   const fullMatch = text.match(fullUrlRegex);
   if (fullMatch?.[0]) return fullMatch[0];
 
   // Then try bare hostnames: word.tld/path (e.g. github.com/user/repo/file.md)
-  const bareUrlRegex = /[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z]{2,})+\/[^\s<>"{}|\\^`\[\]]+/gi;
+  const bareUrlRegex = /[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z]{2,})+\/[^\s<>"{}|\\^`[\]]+/gi;
   const bareMatch = text.match(bareUrlRegex);
   if (bareMatch?.[0]) return `https://${bareMatch[0]}`;
 
@@ -41,7 +44,9 @@ function extractTokenFromText(text: string): string | null {
 export const AddUrlToKnowledgeAction: Action = {
   name: "ADD_URL_TO_KNOWLEDGE",
   description:
-    "Add a single document from a URL into the agent's Knowledge. Use when user shares a URL and wants to add it to knowledge base. If authentication is enabled and no token is provided, ask the user for the auth token.",
+    "Add a single document from a URL into the agent's Knowledge. Use when user shares a URL and wants to add it to knowledge base. " +
+    "Scientific papers are automatically detected, classified, and enriched with metadata. " +
+    "If authentication is enabled and no token is provided, ask the user for the auth token.",
   similes: [
     "ADD_URL",
     "SAVE_URL",
@@ -50,6 +55,8 @@ export const AddUrlToKnowledgeAction: Action = {
     "ADD_DOCUMENT",
     "SAVE_DOCUMENT",
     "ADD_TO_KNOWLEDGE",
+    "ADD_PAPER",
+    "SAVE_PAPER",
   ],
   parameters: {
     type: "object",
@@ -147,6 +154,15 @@ export const AddUrlToKnowledgeAction: Action = {
       args.roomId || (runtime as any).defaultRoomId || runtime.agentId;
 
     try {
+      // Step 1: Quick pre-check if this looks like a scientific paper
+      const detector = getScientificPaperDetector();
+      const isLikelyPaper = detector.isLikelyScientificPaper(url);
+
+      console.log(
+        `[autognostic] Processing URL: ${url} (likely paper: ${isLikelyPaper})`
+      );
+
+      // Step 2: Mirror the document to get content
       const result = await mirrorDocToKnowledge(runtime, {
         url,
         filename,
@@ -160,13 +176,81 @@ export const AddUrlToKnowledgeAction: Action = {
         },
       });
 
-      const authStatus = isAuthEnabled(runtime)
-        ? " (authenticated)"
-        : "";
+      // Step 3: Run scientific paper detection and classification
+      const paperHandler = createScientificPaperHandler(runtime);
+      
+      // Fetch the stored content to run classification
+      // (mirrorDocToKnowledge already stored it, we need to retrieve it)
+      const { AutognosticDocumentsRepository } = await import("../db/autognosticDocumentsRepository");
+      const docsRepo = new AutognosticDocumentsRepository(runtime);
+      const storedDocs = await docsRepo.getByUrl(url);
+      const content = storedDocs[0]?.content || "";
+
+      // Step 4: Process through scientific paper handler
+      const handlerResult = await paperHandler.process(
+        url,
+        content,
+        storedDocs[0]?.id || randomUUID()
+      );
+
+      // Step 5: Update source with static detection info
+      const sourcesRepo = new AutognosticSourcesRepository(runtime);
+      if (handlerResult.isScientificPaper) {
+        // Scientific papers are static content - disable version tracking
+        await sourcesRepo.markStaticContent(sourceId, true, {
+          detectedAt: new Date().toISOString(),
+          reason: handlerResult.classification?.confidence 
+            ? (handlerResult.classification.confidence >= 0.7 ? "doi_verified" : "content_analysis")
+            : "url_pattern",
+          confidence: handlerResult.classification?.confidence 
+            ? (handlerResult.classification.confidence >= 0.7 ? "high" : "medium")
+            : "medium",
+          doi: handlerResult.paperMetadata?.doi,
+          crossrefData: handlerResult.paperMetadata ? {
+            type: "journal-article",
+            title: handlerResult.paperMetadata.title,
+            journal: handlerResult.paperMetadata.journal,
+            publisher: handlerResult.paperMetadata.publisher,
+            publishedDate: handlerResult.paperMetadata.publishedDate,
+          } : undefined,
+        });
+
+        // Update the stored document with enriched content
+        if (handlerResult.enrichedContent !== content && storedDocs[0]) {
+          // The enriched content includes classification metadata prepended
+          // We could update the stored document, but for now we'll leave the original
+          // and rely on the classification record for metadata
+          console.log(
+            `[autognostic] Paper classified as ${handlerResult.zone.toUpperCase()} zone ` +
+            `(confidence: ${((handlerResult.classification?.confidence || 0) * 100).toFixed(1)}%)`
+          );
+        }
+      }
+
+      const authStatus = isAuthEnabled(runtime) ? " (authenticated)" : "";
+
+      // Build response message based on paper detection
+      let responseText: string;
+      if (handlerResult.isScientificPaper) {
+        const zoneEmoji = handlerResult.zone === "gold" ? "🥇" : handlerResult.zone === "silver" ? "🥈" : "🥉";
+        const domainInfo = handlerResult.classification?.primaryPath?.l1 
+          ? ` | Domain: ${handlerResult.classification.primaryPath.l1}`
+          : "";
+        const titleInfo = handlerResult.paperMetadata?.title
+          ? `\n📄 "${handlerResult.paperMetadata.title}"`
+          : "";
+        
+        responseText = 
+          `Added scientific paper to Knowledge${authStatus}.${titleInfo}\n` +
+          `${zoneEmoji} Lakehouse Zone: ${handlerResult.zone.toUpperCase()}${domainInfo}\n` +
+          `Full document archived with classification metadata.`;
+      } else {
+        responseText = `Added ${url} to Knowledge${authStatus}. Full document archived for direct quotes.`;
+      }
 
       return {
         success: true,
-        text: `Added ${url} to Knowledge${authStatus}. Full document archived for direct quotes.`,
+        text: responseText,
         data: {
           url,
           filename,
@@ -174,6 +258,19 @@ export const AddUrlToKnowledgeAction: Action = {
           sourceId,
           versionId,
           authEnabled: isAuthEnabled(runtime),
+          isScientificPaper: handlerResult.isScientificPaper,
+          lakehouseZone: handlerResult.zone,
+          classification: handlerResult.classification ? {
+            primaryPath: handlerResult.classification.primaryPath,
+            confidence: handlerResult.classification.confidence,
+            focus: handlerResult.classification.focus,
+          } : undefined,
+          paperMetadata: handlerResult.paperMetadata ? {
+            doi: handlerResult.paperMetadata.doi,
+            title: handlerResult.paperMetadata.title,
+            journal: handlerResult.paperMetadata.journal,
+            authors: handlerResult.paperMetadata.authors,
+          } : undefined,
           ...result,
         },
       };

@@ -24,7 +24,8 @@ export const autognosticPlugin: Plugin = {
   name: "@elizaos/plugin-autognostic",
   description:
     "Autognostic - Conversational Automated Knowledge Control. " +
-    "Enables agents to build, manage, and query their own knowledge base through conversation.",
+    "Enables agents to build, manage, and query their own knowledge base through conversation. " +
+    "Includes scientific paper detection, classification (5-level taxonomy), and lakehouse zones.",
   services: [HttpService, GithubService, AutognosticService],
   actions: [
     AddUrlToKnowledgeAction,
@@ -44,12 +45,38 @@ export const autognosticPlugin: Plugin = {
 
 export default autognosticPlugin;
 
-// Re-exports
+// Re-exports for external use
 export { removeFromKnowledge, removeDocumentByUrl } from "./integration/removeFromKnowledge";
-export { getScientificPaperDetector } from "./services/ScientificPaperDetector";
+
+// Scientific paper detection & classification
+export { 
+  ScientificPaperDetector,
+  getScientificPaperDetector,
+  type DetectionResult,
+} from "./services/ScientificPaperDetector";
+
+export {
+  ScientificPaperHandler,
+  createScientificPaperHandler,
+  type ClassificationResult,
+  type HandlerResult,
+} from "./services/ScientificPaperHandler";
+
+// Scheduled sync
 export { getScheduledSyncService } from "./services/ScheduledSyncService";
+
+// Quote retrieval
 export {
   getExactQuote,
   getLineContent,
   getFullDocument,
 } from "./integration/getExactQuote";
+
+// Schema types
+export type {
+  StaticDetectionMetadata,
+  ClassificationPath,
+  ResearchFocus,
+  ClassificationEvidence,
+  PaperMetadata,
+} from "./db/schema";

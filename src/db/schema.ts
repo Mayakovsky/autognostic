@@ -7,10 +7,15 @@ import {
   uuid,
   integer,
   index,
+  real,
 } from "drizzle-orm/pg-core";
 
 // Create dedicated schema for plugin isolation
 const autognostic = pgSchema("autognostic");
+
+// ============================================================================
+// CORE TABLES
+// ============================================================================
 
 export const autognosticSettings = autognostic.table("settings", {
   agentId: text("agent_id").primaryKey(),
@@ -92,7 +97,90 @@ export const autognosticDocuments = autognostic.table("documents", {
 });
 export type AutognosticDocumentsRow = typeof autognosticDocuments.$inferSelect;
 
-// Sync configuration
+// ============================================================================
+// SCIENTIFIC PAPER CLASSIFICATION TABLES
+// ============================================================================
+
+/**
+ * Scientific Paper Classification Record
+ * Implements the 5-level taxonomy from scientific_paper_classification_schema.md
+ * 
+ * Lakehouse Zones:
+ * - Bronze: Raw document (no classification)
+ * - Silver: DOI/ISSN verified scientific paper
+ * - Gold: Fully classified with L1-L4 path + L5 focus facets
+ */
+export const autognosticPaperClassification = autognostic.table("paper_classification", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  documentId: uuid("document_id").notNull(),
+  
+  // Lakehouse zone tracking
+  zone: text("zone").notNull().default("bronze"), // 'bronze' | 'silver' | 'gold'
+  promotedToSilverAt: timestamp("promoted_to_silver_at", { withTimezone: true }),
+  promotedToGoldAt: timestamp("promoted_to_gold_at", { withTimezone: true }),
+  
+  // Primary classification path (L1 → L4)
+  primaryPath: jsonb("primary_path").$type<ClassificationPath | null>(),
+  
+  // Secondary classification paths (for interdisciplinary papers)
+  secondaryPaths: jsonb("secondary_paths").$type<ClassificationPath[]>(),
+  
+  // Level 5: Research Focus (structured facets)
+  focus: jsonb("focus").$type<ResearchFocus | null>(),
+  
+  // Classification metadata
+  confidence: real("confidence"), // 0.0 - 1.0
+  evidence: jsonb("evidence").$type<ClassificationEvidence[]>(),
+  classifierVersion: text("classifier_version"),
+  
+  // Paper metadata extracted from Crossref/content
+  paperMetadata: jsonb("paper_metadata").$type<PaperMetadata | null>(),
+  
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+export type AutognosticPaperClassificationRow = typeof autognosticPaperClassification.$inferSelect;
+
+/**
+ * Taxonomy nodes for L1-L4 hierarchy
+ * Stores the controlled vocabulary for classification
+ */
+export const autognosticTaxonomyNodes = autognostic.table("taxonomy_nodes", {
+  id: text("id").primaryKey(), // e.g., "L1.NATSCI", "L2.NATSCI.PHYS"
+  level: integer("level").notNull(), // 1-4
+  name: text("name").notNull(),
+  parentId: text("parent_id"),
+  aliases: jsonb("aliases").$type<string[]>(),
+  definition: text("definition"),
+  keywords: jsonb("keywords").$type<string[]>(),
+  examples: jsonb("examples").$type<string[]>(),
+  status: text("status").notNull().default("active"), // 'active' | 'deprecated'
+  versionIntroduced: text("version_introduced").default("1.0"),
+  versionDeprecated: text("version_deprecated"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+export type AutognosticTaxonomyNodeRow = typeof autognosticTaxonomyNodes.$inferSelect;
+
+/**
+ * Controlled vocabulary for Level 5 facets
+ */
+export const autognosticControlledVocab = autognostic.table("controlled_vocab", {
+  id: text("id").primaryKey(),
+  facetType: text("facet_type").notNull(), // 'task_study_type' | 'method_approach' | etc.
+  term: text("term").notNull(),
+  aliases: jsonb("aliases").$type<string[]>(),
+  definition: text("definition"),
+  status: text("status").notNull().default("active"),
+  usageCount: integer("usage_count").default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+export type AutognosticControlledVocabRow = typeof autognosticControlledVocab.$inferSelect;
+
+// ============================================================================
+// SYNC TABLES
+// ============================================================================
+
 export const autognosticSyncConfig = autognostic.table("sync_config", {
   id: text("id").primaryKey().default("default"),
   cronExpression: text("cron_expression").default("0 3 * * *"),
@@ -103,7 +191,6 @@ export const autognosticSyncConfig = autognostic.table("sync_config", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-// Sync log
 export const autognosticSyncLog = autognostic.table("sync_log", {
   id: text("id").primaryKey(),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
@@ -118,7 +205,11 @@ export const autognosticSyncLog = autognostic.table("sync_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
-// Type for static detection metadata
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/** Static detection metadata (for version tracking decisions) */
 export interface StaticDetectionMetadata {
   detectedAt: string;
   reason: 'doi_verified' | 'issn_verified' | 'url_pattern' | 'content_analysis' | 'manual';
@@ -131,7 +222,66 @@ export interface StaticDetectionMetadata {
     journal?: string;
     publisher?: string;
     publishedDate?: string;
+    subjects?: string[];
+    authors?: string[];
+    abstract?: string;
   };
+}
+
+/** Classification path (L1 → L4) */
+export interface ClassificationPath {
+  l1: string; // e.g., "L1.NATSCI"
+  l2: string; // e.g., "L2.NATSCI.PHYS"
+  l3?: string; // e.g., "L3.NATSCI.PHYS.COND_MAT"
+  l4?: string; // e.g., "L4.NATSCI.PHYS.COND_MAT.SUPERCONDUCT"
+  confidence?: number;
+}
+
+/** Level 5: Research Focus (structured facets) */
+export interface ResearchFocus {
+  // Required facets
+  phenomenonTopic: string[];
+  taskStudyType: string[];
+  methodApproach: string[];
+  entitySystem: string[];
+  
+  // Optional facets
+  measurementOutcome?: string[];
+  contextSetting?: string[];
+  applicationImpact?: string[];
+  
+  // Free-text summary (<=160 chars)
+  freeTextFocus?: string;
+  
+  // Additional metadata
+  noveltyClaims?: string[];
+  keyTerms?: string[];
+  citationsGraphHooks?: string[]; // dataset IDs, gene IDs, arXiv categories, etc.
+}
+
+/** Evidence supporting classification */
+export interface ClassificationEvidence {
+  field: 'title' | 'abstract' | 'keywords' | 'methods' | 'conclusions' | 'full_text';
+  snippet: string;
+  relevance?: number;
+}
+
+/** Paper metadata extracted from Crossref or content */
+export interface PaperMetadata {
+  doi?: string;
+  title?: string;
+  authors?: string[];
+  journal?: string;
+  publisher?: string;
+  publishedDate?: string;
+  abstract?: string;
+  keywords?: string[];
+  subjects?: string[]; // Crossref subject areas
+  references?: number;
+  citedBy?: number;
+  license?: string;
+  arxivCategories?: string[];
+  pubmedId?: string;
 }
 
 export interface SyncLogEntry {
@@ -147,9 +297,22 @@ export interface SyncLogEntry {
   errors?: any[];
 }
 
-// Database indexes for performance
+// ============================================================================
+// DATABASE INDEXES
+// ============================================================================
+
 export const autognosticDocumentsUrlIdx = index("autognostic_documents_url_idx").on(autognosticDocuments.url);
 export const autognosticDocumentsSourceVersionIdx = index("autognostic_documents_source_version_idx")
   .on(autognosticDocuments.sourceId, autognosticDocuments.versionId);
 export const autognosticVersionsSourceStatusIdx = index("autognostic_versions_source_status_idx")
   .on(autognosticVersions.sourceId, autognosticVersions.status);
+
+// Paper classification indexes
+export const autognosticPaperClassificationDocIdx = index("autognostic_paper_class_doc_idx")
+  .on(autognosticPaperClassification.documentId);
+export const autognosticPaperClassificationZoneIdx = index("autognostic_paper_class_zone_idx")
+  .on(autognosticPaperClassification.zone);
+export const autognosticTaxonomyNodesLevelIdx = index("autognostic_taxonomy_level_idx")
+  .on(autognosticTaxonomyNodes.level);
+export const autognosticControlledVocabFacetIdx = index("autognostic_vocab_facet_idx")
+  .on(autognosticControlledVocab.facetType);

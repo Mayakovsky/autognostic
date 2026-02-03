@@ -8,6 +8,9 @@ import {
   autognosticDocuments,
   autognosticSyncConfig,
   autognosticSyncLog,
+  autognosticPaperClassification,
+  autognosticTaxonomyNodes,
+  autognosticControlledVocab,
 } from "./db/schema";
 
 export const autognosticSchema = {
@@ -20,4 +23,8 @@ export const autognosticSchema = {
   autognosticDocuments,
   autognosticSyncConfig,
   autognosticSyncLog,
+  // Scientific paper classification tables
+  autognosticPaperClassification,
+  autognosticTaxonomyNodes,
+  autognosticControlledVocab,
 };

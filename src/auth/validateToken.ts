@@ -134,9 +134,9 @@ export function validateToken(
  */
 function constantTimeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) {
-    let result = 0;
+    let _result = 0;
     for (let i = 0; i < a.length; i++) {
-      result |= a.charCodeAt(i) ^ (b.charCodeAt(i % b.length) || 0);
+      _result |= a.charCodeAt(i) ^ (b.charCodeAt(i % b.length) || 0);
     }
     return false;
   }
