@@ -1,3 +1,4 @@
+import type { PgTableWithColumns } from "drizzle-orm/pg-core";
 import {
   autognosticSettings,
   autognosticRefreshSettings,
@@ -13,7 +14,7 @@ import {
   autognosticControlledVocab,
 } from "./db/schema";
 
-export const autognosticSchema = {
+export const autognosticSchema: Record<string, PgTableWithColumns<any>> = {
   autognosticSettings,
   autognosticRefreshSettings,
   autognosticPreviewCache,
