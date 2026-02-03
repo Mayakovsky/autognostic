@@ -3,7 +3,6 @@ import type { Plugin, IAgentRuntime } from "@elizaos/core";
 import { HttpService } from "./services/httpService";
 import { GithubService } from "./services/githubService";
 import { AutognosticService } from "./services/AutognosticService";
-import { DatabaseSeeder } from "./services/DatabaseSeeder";
 
 import { AddUrlToKnowledgeAction } from "./actions/addUrlToKnowledgeAction";
 import { MirrorSourceToKnowledgeAction } from "./actions/mirrorSourceToKnowledgeAction";
@@ -21,52 +20,50 @@ import { knowledgeSummaryProvider } from "./providers/knowledgeSummaryProvider";
 
 import { autognosticSchema } from "./schema";
 
+/**
+ * Plugin initialization - runs after ElizaOS creates tables from schema.
+ * Seeds reference data (taxonomy nodes, controlled vocabulary).
+ */
+async function initPlugin(_config: Record<string, string>, runtime: IAgentRuntime): Promise<void> {
+  console.log("[autognostic] Initializing plugin...");
+  
+  // Give database time to initialize (especially for PGlite)
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  try {
+    // Dynamic import to avoid circular dependency
+    const { DatabaseSeeder } = await import("./services/DatabaseSeeder");
+    const seeder = new DatabaseSeeder(runtime);
+    const result = await seeder.seedIfEmpty();
+    
+    if (result.taxonomySeeded > 0 || result.vocabSeeded > 0) {
+      console.log(
+        `[autognostic] Seeded ${result.taxonomySeeded} taxonomy nodes, ` +
+        `${result.vocabSeeded} vocabulary terms`
+      );
+    } else {
+      const status = await seeder.checkSeedStatus();
+      if (status.taxonomyCount > 0 || status.vocabCount > 0) {
+        console.log(
+          `[autognostic] Found ${status.taxonomyCount} taxonomy nodes, ` +
+          `${status.vocabCount} vocabulary terms`
+        );
+      } else {
+        console.log("[autognostic] Initialized (seed data created on first use)");
+      }
+    }
+  } catch (err) {
+    console.warn("[autognostic] Init note:", err instanceof Error ? err.message : err);
+  }
+}
+
 export const autognosticPlugin: Plugin = {
   name: "@elizaos/plugin-autognostic",
   description:
     "Autognostic - Conversational Automated Knowledge Control. " +
     "Enables agents to build, manage, and query their own knowledge base through conversation. " +
     "Includes scientific paper detection, classification (5-level taxonomy), and lakehouse zones.",
-  
-  /**
-   * Initialize plugin - seed reference data on startup.
-   * Works with both PGlite (local) and PostgreSQL (cloud) backends.
-   */
-  init: async (_config: Record<string, string>, runtime: IAgentRuntime) => {
-    console.log("[autognostic] Initializing plugin...");
-    
-    // Give database time to initialize (especially for PGlite)
-    // ElizaOS creates tables from schema export before init runs
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    try {
-      const seeder = new DatabaseSeeder(runtime);
-      const result = await seeder.seedIfEmpty();
-      
-      if (result.taxonomySeeded > 0 || result.vocabSeeded > 0) {
-        console.log(
-          `[autognostic] Initialized: seeded ${result.taxonomySeeded} taxonomy nodes, ` +
-          `${result.vocabSeeded} vocabulary terms`
-        );
-      } else {
-        // Check if data already exists
-        const status = await seeder.checkSeedStatus();
-        if (status.taxonomyCount > 0 || status.vocabCount > 0) {
-          console.log(
-            `[autognostic] Initialized: found ${status.taxonomyCount} taxonomy nodes, ` +
-            `${status.vocabCount} vocabulary terms`
-          );
-        } else {
-          console.log("[autognostic] Initialized (seed data will be created on first classification)");
-        }
-      }
-    } catch (err) {
-      // Non-fatal - plugin can still function, classification will work without seed data
-      console.warn("[autognostic] Initialization note:", err instanceof Error ? err.message : err);
-      console.log("[autognostic] Plugin initialized (seed data may be created later)");
-    }
-  },
-  
+  init: initPlugin,
   services: [HttpService, GithubService, AutognosticService],
   actions: [
     AddUrlToKnowledgeAction,
@@ -86,8 +83,13 @@ export const autognosticPlugin: Plugin = {
 
 export default autognosticPlugin;
 
-// Re-exports for external use
+// ============================================================================
+// RE-EXPORTS (for external consumers)
+// ============================================================================
+
 export { removeFromKnowledge, removeDocumentByUrl } from "./integration/removeFromKnowledge";
+export { getScheduledSyncService } from "./services/ScheduledSyncService";
+export { getExactQuote, getLineContent, getFullDocument } from "./integration/getExactQuote";
 
 // Scientific paper detection & classification
 export { 
@@ -103,18 +105,7 @@ export {
   type HandlerResult,
 } from "./services/ScientificPaperHandler";
 
-// Database seeding
 export { DatabaseSeeder } from "./services/DatabaseSeeder";
-
-// Scheduled sync
-export { getScheduledSyncService } from "./services/ScheduledSyncService";
-
-// Quote retrieval
-export {
-  getExactQuote,
-  getLineContent,
-  getFullDocument,
-} from "./integration/getExactQuote";
 
 // Schema types
 export type {
@@ -125,7 +116,6 @@ export type {
   PaperMetadata,
 } from "./db/schema";
 
-// Seed data types
 export type {
   TaxonomyNodeSeed,
   ControlledVocabSeed,
