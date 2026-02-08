@@ -64,6 +64,8 @@ export const autognosticPlugin: Plugin = {
     "Enables agents to build, manage, and query their own knowledge base through conversation. " +
     "Includes scientific paper detection, classification (5-level taxonomy), and lakehouse zones.",
   init: initPlugin,
+  // Declare plugin dependencies - ElizaOS will load these before this plugin
+  dependencies: ["@elizaos/plugin-knowledge", "@elizaos/plugin-sql"],
   services: [HttpService, GithubService, AutognosticService],
   actions: [
     AddUrlToKnowledgeAction,
@@ -120,3 +122,24 @@ export type {
   TaxonomyNodeSeed,
   ControlledVocabSeed,
 } from "./db/seedData";
+
+// Error types
+export {
+  AutognosticError,
+  AutognosticNetworkError,
+  AutognosticDatabaseError,
+  AutognosticValidationError,
+  AutognosticClassificationError,
+  AutognosticStorageError,
+  AutognosticAuthError,
+  ErrorCode,
+  wrapError,
+  isAutognosticError,
+  getErrorCode,
+  type ErrorContext,
+  type SerializedError,
+} from "./errors";
+
+// Utilities
+export { logger, createLogger, type LogLevel, type LogEntry } from "./utils/logger";
+export { withRetry, RetryPresets, type RetryConfig } from "./utils/retry";

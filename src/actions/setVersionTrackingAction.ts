@@ -1,6 +1,7 @@
-import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content } from "@elizaos/core";
 import { requireValidToken, AutognosticAuthError } from "../auth/validateToken";
 import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository";
+import { safeSerialize } from "../utils/safeSerialize";
 
 export const SetVersionTrackingAction: Action = {
   name: "SET_VERSION_TRACKING",
@@ -36,28 +37,28 @@ export const SetVersionTrackingAction: Action = {
   },
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const text = ((message.content as any)?.text || "").toLowerCase();
+    const text = ((message.content as Content)?.text || "").toLowerCase();
     return /\b(enable|disable|toggle|stop|start).*(version|tracking|sync|update)/i.test(text);
   },
 
   async handler(
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: any,
-    _options: any,
-    callback: any
+    _state: State | undefined,
+    _options: HandlerOptions | undefined,
+    callback: HandlerCallback | undefined
   ): Promise<ActionResult> {
-    const args = (_message.content as any) || {};
+    const args = (_message.content as Record<string, unknown>) || {};
 
     try {
-      requireValidToken(runtime, args.authToken);
+      requireValidToken(runtime, args.authToken as string | undefined);
     } catch (err) {
       if (err instanceof AutognosticAuthError) {
         const text = err.message;
         if (callback) {
           await callback({ text, action: "SET_VERSION_TRACKING" });
         }
-        return { success: false, text, data: { error: "auth_failed" } };
+        return { success: false, text, data: safeSerialize({ error: "auth_failed" }) };
       }
       throw err;
     }
@@ -70,7 +71,7 @@ export const SetVersionTrackingAction: Action = {
       if (callback) {
         await callback({ text, action: "SET_VERSION_TRACKING" });
       }
-      return { success: false, text, data: { error: "missing_source_id" } };
+      return { success: false, text, data: safeSerialize({ error: "missing_source_id" }) };
     }
 
     if (typeof enabled !== "boolean") {
@@ -78,7 +79,7 @@ export const SetVersionTrackingAction: Action = {
       if (callback) {
         await callback({ text, action: "SET_VERSION_TRACKING" });
       }
-      return { success: false, text, data: { error: "invalid_enabled" } };
+      return { success: false, text, data: safeSerialize({ error: "invalid_enabled" }) };
     }
 
     const sourcesRepo = new AutognosticSourcesRepository(runtime);
@@ -89,7 +90,7 @@ export const SetVersionTrackingAction: Action = {
       if (callback) {
         await callback({ text, action: "SET_VERSION_TRACKING" });
       }
-      return { success: false, text, data: { error: "source_not_found" } };
+      return { success: false, text, data: safeSerialize({ error: "source_not_found" }) };
     }
 
     await sourcesRepo.updateVersionTracking(sourceId, enabled);
@@ -106,7 +107,7 @@ export const SetVersionTrackingAction: Action = {
     return {
       success: true,
       text,
-      data: { sourceId, versionTrackingEnabled: enabled },
+      data: safeSerialize({ sourceId, versionTrackingEnabled: enabled }),
     };
   },
 };

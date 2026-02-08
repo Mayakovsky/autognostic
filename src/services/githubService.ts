@@ -24,7 +24,7 @@ export class GithubService extends Service {
     super(runtime);
     const token =
       process.env.GITHUB_TOKEN ||
-      (runtime.character as any)?.settings?.autognostic?.github?.token;
+      ((runtime.character?.settings as Record<string, Record<string, Record<string, unknown>>> | undefined)?.autognostic?.github?.token as string | undefined);
 
     this.octokit = new Octokit(token ? { auth: token } : {});
   }
@@ -55,7 +55,7 @@ export class GithubService extends Service {
     const owner = parts[0];
     const repo = parts[1].replace(/\.git$/, "");
 
-    const kind = (parts[2] as any) as "tree" | "blob" | undefined;
+    const kind = parts[2] as "tree" | "blob" | undefined;
     if (!kind) return { owner, repo, kind: "repo" };
 
     if (kind !== "tree" && kind !== "blob") return { owner, repo, kind: "repo" };

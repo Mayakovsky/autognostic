@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import {
   autognosticSources,
   type AutognosticSourceRow,
+  type StaticDetectionMetadata,
 } from "./schema";
 import { getDb } from "./getDb";
 
@@ -63,7 +64,7 @@ export class AutognosticSourcesRepository {
   async markStaticContent(
     id: string,
     isStatic: boolean,
-    metadata: any
+    metadata: StaticDetectionMetadata | null
   ): Promise<void> {
     const db = await getDb(this.runtime);
     await db

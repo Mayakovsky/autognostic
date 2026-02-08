@@ -1,4 +1,5 @@
 import type { IAgentRuntime } from "@elizaos/core";
+import { AutognosticError, ErrorCode, type ErrorContext } from "../errors/AutognosticError";
 
 export interface TokenValidationResult {
   valid: boolean;
@@ -37,8 +38,8 @@ export interface AuthConfig {
  */
 export function getAuthConfig(runtime: IAgentRuntime): AuthConfig {
   // Check runtime settings first (allows per-agent configuration)
-  const runtimeEnabled = (runtime as any).getSetting?.("AUTOGNOSTIC_AUTH_ENABLED");
-  const runtimeToken = (runtime as any).getSetting?.("AUTOGNOSTIC_AUTH_TOKEN");
+  const runtimeEnabled = runtime.getSetting("AUTOGNOSTIC_AUTH_ENABLED");
+  const runtimeToken = runtime.getSetting("AUTOGNOSTIC_AUTH_TOKEN");
 
   // Determine if auth is enabled
   let enabled = false;
@@ -168,13 +169,41 @@ export function requireValidToken(
 /**
  * Custom error class for auth failures.
  */
-export class AutognosticAuthError extends Error {
+export class AutognosticAuthError extends AutognosticError {
   public readonly needsToken: boolean;
 
-  constructor(message: string, needsToken: boolean = false) {
-    super(message);
+  constructor(message: string, needsToken: boolean = false, context: Partial<ErrorContext> = {}) {
+    const code = needsToken
+      ? ErrorCode.AUTH_REQUIRED
+      : ErrorCode.AUTH_INVALID_TOKEN;
+
+    super(message, code, { ...context, operation: "auth" }, { isRetryable: false });
     this.name = "AutognosticAuthError";
     this.needsToken = needsToken;
+  }
+
+  static required(context: Partial<ErrorContext> = {}) {
+    return new AutognosticAuthError(
+      "This operation requires authentication. Please provide the auth token.",
+      true,
+      context
+    );
+  }
+
+  static invalidToken(context: Partial<ErrorContext> = {}) {
+    return new AutognosticAuthError(
+      "Invalid auth token. Access denied.",
+      false,
+      context
+    );
+  }
+
+  static misconfigured(context: Partial<ErrorContext> = {}) {
+    return new AutognosticAuthError(
+      "Auth is enabled but AUTOGNOSTIC_AUTH_TOKEN is not set. Please configure the token or disable auth.",
+      false,
+      context
+    );
   }
 }
 

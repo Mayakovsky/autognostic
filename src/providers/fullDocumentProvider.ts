@@ -28,7 +28,7 @@ export const fullDocumentProvider: Provider = {
     message: Memory,
     state: State
   ): Promise<ProviderResult> {
-    const messageText = (message.content as any)?.text || "";
+    const messageText = message.content?.text || "";
 
     // Detect if user is asking for quotes/content from documents
     const quotePatterns = [

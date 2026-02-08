@@ -64,20 +64,20 @@ export class AutognosticService extends Service {
    * Runs on service registration; safe to call multiple times.
    */
   async initialize(runtime: IAgentRuntime): Promise<void> {
-    const charSettings = (runtime.character as any)?.settings ?? {};
-    const dmSettings: any = charSettings.autognostic ?? {};
+    const charSettings = runtime.character?.settings ?? {};
+    const dmSettings = (charSettings as Record<string, unknown>).autognostic as Record<string, unknown> ?? {};
 
     // ----- Sources (what to mirror)
     const sources: SourceConfig[] =
-      dmSettings.sources ??
+      (dmSettings.sources as SourceConfig[] | undefined) ??
       ([] as SourceConfig[]); // default empty; you can set a default if desired
 
     // ----- Normalize + persist size policy
-    const mergedSizePolicy = this.mergeSizePolicy(dmSettings.sizePolicy);
+    const mergedSizePolicy = this.mergeSizePolicy(dmSettings.sizePolicy as Partial<AutognosticSizePolicy> & Record<string, unknown> | undefined);
     await this.settingsRepo.upsertPolicy(runtime.agentId, mergedSizePolicy);
 
     // ----- Normalize + persist refresh policy
-    const mergedRefreshPolicy = this.mergeRefreshPolicy(dmSettings.refreshPolicy);
+    const mergedRefreshPolicy = this.mergeRefreshPolicy(dmSettings.refreshPolicy as Partial<AutognosticRefreshPolicy> & Record<string, unknown> | undefined);
     await this.refreshRepo.upsertPolicy(runtime.agentId, mergedRefreshPolicy);
 
     // ----- Startup orchestration (kickoff)
@@ -97,8 +97,8 @@ export class AutognosticService extends Service {
    *  - preferred: bytes fields (autoIngestBelowBytes, maxBytesHardLimit)
    *  - back-compat/human: MB fields (autoIngestBelowMB, maxMBHardLimit)
    */
-  mergeSizePolicy(input?: Partial<AutognosticSizePolicy> & Record<string, any>): AutognosticSizePolicy {
-    const user: any = input ?? {};
+  mergeSizePolicy(input?: Partial<AutognosticSizePolicy> & Record<string, unknown>): AutognosticSizePolicy {
+    const user = (input ?? {}) as Record<string, unknown>;
 
     // Start from defaults, then overlay.
     const merged: AutognosticSizePolicy = {
@@ -132,9 +132,9 @@ export class AutognosticService extends Service {
    *  - back-compat/human: minutes/seconds fields (previewCacheTtlMinutes, reconcileCooldownMinutes, startupTimeoutSeconds)
    */
   mergeRefreshPolicy(
-    input?: Partial<AutognosticRefreshPolicy> & Record<string, any>
+    input?: Partial<AutognosticRefreshPolicy> & Record<string, unknown>
   ): AutognosticRefreshPolicy {
-    const user: any = input ?? {};
+    const user = (input ?? {}) as Record<string, unknown>;
 
     const merged: AutognosticRefreshPolicy = {
       ...DEFAULT_REFRESH_POLICY,

@@ -13,8 +13,8 @@ export class HttpService extends Service {
   override capabilityDescription =
     "Fetches remote HTTP(S) resources (GET/HEAD) for preview and ingestion, with timeouts and safe defaults.";
 
-  private defaultTimeoutMs = HTTP_DEFAULTS.TIMEOUT_MS;
-  private defaultUserAgent = HTTP_DEFAULTS.USER_AGENT;
+  private defaultTimeoutMs: number = HTTP_DEFAULTS.TIMEOUT_MS;
+  private defaultUserAgent: string = HTTP_DEFAULTS.USER_AGENT;
 
   /** Required by ElizaOS core (service registration). */
   static async start(runtime: IAgentRuntime): Promise<HttpService> {
@@ -24,8 +24,8 @@ export class HttpService extends Service {
   constructor(runtime: IAgentRuntime) {
     super(runtime);
     // Optional per-character tuning
-    const dm = (runtime.character as any)?.settings?.autognostic;
-    const http = dm?.http;
+    const dm = (runtime.character?.settings as Record<string, Record<string, unknown>> | undefined)?.autognostic as Record<string, unknown> | undefined;
+    const http = dm?.http as { timeoutMs?: number; userAgent?: string } | undefined;
     if (typeof http?.timeoutMs === "number") this.defaultTimeoutMs = http.timeoutMs;
     if (typeof http?.userAgent === "string") this.defaultUserAgent = http.userAgent;
   }

@@ -1,5 +1,6 @@
-import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content } from "@elizaos/core";
 import { getExactQuote, getLineContent, getFullDocument } from "../integration/getExactQuote";
+import { safeSerialize } from "../utils/safeSerialize";
 
 export const GetQuoteAction: Action = {
   name: "GET_EXACT_QUOTE",
@@ -21,18 +22,18 @@ export const GetQuoteAction: Action = {
   },
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const text = ((message.content as any)?.text || "").toLowerCase();
+    const text = ((message.content as Content)?.text || "").toLowerCase();
     return /\b(quote|line\s+\d|exact|verbatim)/i.test(text);
   },
 
   async handler(
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: any,
-    _options: any,
-    callback: any
+    _state: State | undefined,
+    _options: HandlerOptions | undefined,
+    callback: HandlerCallback | undefined
   ): Promise<ActionResult> {
-    const args = (_message.content as any) || {};
+    const args = (_message.content as Record<string, unknown>) || {};
     const url = args.url as string;
     const mode = (args.mode as string) || "search";
 
@@ -41,51 +42,52 @@ export const GetQuoteAction: Action = {
       if (!content) {
         const text = `Document not found: ${url}`;
         if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
-        return { success: false, text, data: { error: "not_found" } };
+        return { success: false, text, data: safeSerialize({ error: "not_found" }) };
       }
       const text = `Full document (${content.length} chars):\n\n${content.slice(0, 5000)}${content.length > 5000 ? "\n...[truncated]" : ""}`;
       if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
       return {
         success: true,
         text,
-        data: { url, charCount: content.length },
+        data: safeSerialize({ url, charCount: content.length }),
       };
     }
 
     if (mode === "line" && args.lineNumber) {
-      const line = await getLineContent(runtime, url, args.lineNumber);
+      const lineNumber = args.lineNumber as number;
+      const line = await getLineContent(runtime, url, lineNumber);
       if (line === null) {
-        const text = `Line ${args.lineNumber} not found in ${url}`;
+        const text = `Line ${lineNumber} not found in ${url}`;
         if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
-        return { success: false, text, data: { error: "not_found" } };
+        return { success: false, text, data: safeSerialize({ error: "not_found" }) };
       }
-      const text = `Line ${args.lineNumber}: "${line}"`;
+      const text = `Line ${lineNumber}: "${line}"`;
       if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
       return {
         success: true,
         text,
-        data: { url, lineNumber: args.lineNumber, content: line },
+        data: safeSerialize({ url, lineNumber, content: line }),
       };
     }
 
     if (args.searchText) {
-      const result = await getExactQuote(runtime, url, args.searchText);
+      const result = await getExactQuote(runtime, url, args.searchText as string);
       if (!result.found) {
         const text = `Text not found in ${url}`;
         if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
-        return { success: false, text, data: { error: "not_found" } };
+        return { success: false, text, data: safeSerialize({ error: "not_found" }) };
       }
       const text = `Found at line ${result.lineNumber}:\n"${result.quote}"\n\nContext: ...${result.context}...`;
       if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
       return {
         success: true,
         text,
-        data: result,
+        data: safeSerialize(result as unknown as Record<string, unknown>),
       };
     }
 
     const text = "Specify searchText for search mode or lineNumber for line mode";
     if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
-    return { success: false, text, data: { error: "invalid_params" } };
+    return { success: false, text, data: safeSerialize({ error: "invalid_params" }) };
   },
 };

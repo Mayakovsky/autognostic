@@ -62,9 +62,9 @@ export async function mirrorDocToKnowledge(
   params: MirrorDocParams
 ) {
   const http =
-    runtime.getService<HttpService>("http") ?? new HttpService({ runtime } as any);
+    runtime.getService<HttpService>("http") ?? new HttpService(runtime);
 
-  const knowledge = runtime.getService<KnowledgeService>("knowledge" as any);
+  const knowledge = runtime.getService<KnowledgeService>("knowledge");
   if (!knowledge) {
     throw new Error(
       "KnowledgeService not available. Make sure @elizaos/plugin-knowledge is registered."
@@ -86,12 +86,8 @@ export async function mirrorDocToKnowledge(
     // Use getRawText for text content - includes HTML detection
     const result = await withRetry(
       () => http.getRawText(rawUrl),
-      {
-        attempts: 3,
-        onRetry: (err, attempt) => {
-          console.warn(`[autognostic] Retry ${attempt} for ${rawUrl}: ${err.message}`);
-        },
-      }
+      { maxAttempts: 3, initialDelayMs: 1000 },
+      `fetch ${rawUrl}`
     );
     content = result.content;
     contentType = params.contentType || result.contentType;
@@ -108,12 +104,8 @@ export async function mirrorDocToKnowledge(
     // For binary or unknown content types, fetch normally
     const res = await withRetry(
       () => http.get(rawUrl),
-      {
-        attempts: 3,
-        onRetry: (err, attempt) => {
-          console.warn(`[autognostic] Retry ${attempt} for ${rawUrl}: ${err.message}`);
-        },
-      }
+      { maxAttempts: 3, initialDelayMs: 1000 },
+      `fetch ${rawUrl}`
     );
     contentType = params.contentType || res.headers.get("content-type") || "application/octet-stream";
 
@@ -164,7 +156,7 @@ export async function mirrorDocToKnowledge(
   const clientDocumentId = randomUUID();
   const worldId = params.worldId ?? runtime.agentId;
 
-  const result = await (knowledge as any).addKnowledge({
+  const result = await knowledge.addKnowledge({
     worldId,
     roomId: params.roomId,
     entityId: params.entityId,
@@ -181,7 +173,7 @@ export async function mirrorDocToKnowledge(
   });
 
   return {
-    knowledgeDocumentId: result.id as string,
+    knowledgeDocumentId: result.storedDocumentMemoryId as string,
     clientDocumentId,
     worldId,
   };

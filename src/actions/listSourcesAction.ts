@@ -1,6 +1,7 @@
-import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content } from "@elizaos/core";
 import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository";
 import { AutognosticVersionsRepository } from "../db/autognosticVersionsRepository";
+import { safeSerialize } from "../utils/safeSerialize";
 
 export const ListSourcesAction: Action = {
   name: "LIST_AUTOGNOSTIC_SOURCES",
@@ -18,16 +19,16 @@ export const ListSourcesAction: Action = {
   },
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const text = ((message.content as any)?.text || "").toLowerCase();
+    const text = ((message.content as Content)?.text || "").toLowerCase();
     return /\b(list|show|what).*(source|mirror)/i.test(text);
   },
 
   async handler(
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: any,
-    _options: any,
-    callback: any
+    _state: State | undefined,
+    _options: HandlerOptions | undefined,
+    callback: HandlerCallback | undefined
   ): Promise<ActionResult> {
     const sourcesRepo = new AutognosticSourcesRepository(runtime);
     const versionsRepo = new AutognosticVersionsRepository(runtime);
@@ -56,7 +57,7 @@ export const ListSourcesAction: Action = {
       return {
         success: true,
         text,
-        data: { sources: [] },
+        data: safeSerialize({ sources: [] }),
       };
     }
 
@@ -71,7 +72,7 @@ export const ListSourcesAction: Action = {
     return {
       success: true,
       text,
-      data: { sources: sourceDetails },
+      data: safeSerialize({ sources: sourceDetails }),
     };
   },
 };

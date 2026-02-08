@@ -1,4 +1,4 @@
-import type { IAgentRuntime } from "@elizaos/core";
+import type { IAgentRuntime, UUID } from "@elizaos/core";
 import { createHash } from "crypto";
 
 import { createDiscoveryForRawUrl } from "../publicspace/discoveryFactory";
@@ -215,7 +215,7 @@ export class ReconciliationService {
       await this.versionsRepo.markFailed(
         source.id,
         remoteVersionId,
-        (err as any)?.message ?? "Unknown error"
+        err instanceof Error ? err.message : "Unknown error"
       );
       return {
         sourceId: source.id,
@@ -223,7 +223,7 @@ export class ReconciliationService {
         versionId: remoteVersionId,
         totalBytes: preview.totalBytes,
         fileCount: preview.files.length,
-        error: (err as any)?.message ?? "Unknown error",
+        error: err instanceof Error ? err.message : "Unknown error",
       };
     }
   }
@@ -251,8 +251,8 @@ export class ReconciliationService {
       return;
     }
 
-    const roomId: any = (this.runtime as any).defaultRoomId ?? source.id;
-    const entityId: any = this.runtime.agentId;
+    const roomId = (((this.runtime as unknown as Record<string, unknown>).defaultRoomId as UUID | undefined) ?? source.id) as UUID;
+    const entityId: UUID = this.runtime.agentId;
 
     for (const f of files) {
       try {

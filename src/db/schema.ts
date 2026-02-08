@@ -69,7 +69,9 @@ export const autognosticVersions = autognostic.table("versions", {
   activatedAt: timestamp("activated_at", { withTimezone: true }),
   failedAt: timestamp("failed_at", { withTimezone: true }),
   failureReason: text("failure_reason"),
-});
+}, (table) => ({
+  sourceStatusIdx: index("autognostic_versions_source_status_idx").on(table.sourceId, table.status),
+}));
 export type AutognosticVersionRow = typeof autognosticVersions.$inferSelect;
 
 export const autognosticKnowledgeLink = autognostic.table("knowledge_link", {
@@ -94,7 +96,10 @@ export const autognosticDocuments = autognostic.table("documents", {
   mimeType: text("mime_type"),
   byteSize: integer("byte_size"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  urlIdx: index("autognostic_documents_url_idx").on(table.url),
+  sourceVersionIdx: index("autognostic_documents_source_version_idx").on(table.sourceId, table.versionId),
+}));
 export type AutognosticDocumentsRow = typeof autognosticDocuments.$inferSelect;
 
 // ============================================================================
@@ -113,32 +118,35 @@ export type AutognosticDocumentsRow = typeof autognosticDocuments.$inferSelect;
 export const autognosticPaperClassification = autognostic.table("paper_classification", {
   id: uuid("id").defaultRandom().primaryKey(),
   documentId: uuid("document_id").notNull(),
-  
+
   // Lakehouse zone tracking
   zone: text("zone").notNull().default("bronze"), // 'bronze' | 'silver' | 'gold'
   promotedToSilverAt: timestamp("promoted_to_silver_at", { withTimezone: true }),
   promotedToGoldAt: timestamp("promoted_to_gold_at", { withTimezone: true }),
-  
+
   // Primary classification path (L1 → L4)
   primaryPath: jsonb("primary_path").$type<ClassificationPath | null>(),
-  
+
   // Secondary classification paths (for interdisciplinary papers)
   secondaryPaths: jsonb("secondary_paths").$type<ClassificationPath[]>(),
-  
+
   // Level 5: Research Focus (structured facets)
   focus: jsonb("focus").$type<ResearchFocus | null>(),
-  
+
   // Classification metadata
   confidence: real("confidence"), // 0.0 - 1.0
   evidence: jsonb("evidence").$type<ClassificationEvidence[]>(),
   classifierVersion: text("classifier_version"),
-  
+
   // Paper metadata extracted from Crossref/content
   paperMetadata: jsonb("paper_metadata").$type<PaperMetadata | null>(),
-  
+
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  docIdx: index("autognostic_paper_class_doc_idx").on(table.documentId),
+  zoneIdx: index("autognostic_paper_class_zone_idx").on(table.zone),
+}));
 export type AutognosticPaperClassificationRow = typeof autognosticPaperClassification.$inferSelect;
 
 /**
@@ -159,7 +167,9 @@ export const autognosticTaxonomyNodes = autognostic.table("taxonomy_nodes", {
   versionDeprecated: text("version_deprecated"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  levelIdx: index("autognostic_taxonomy_level_idx").on(table.level),
+}));
 export type AutognosticTaxonomyNodeRow = typeof autognosticTaxonomyNodes.$inferSelect;
 
 /**
@@ -174,7 +184,9 @@ export const autognosticControlledVocab = autognostic.table("controlled_vocab", 
   status: text("status").notNull().default("active"),
   usageCount: integer("usage_count").default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  facetIdx: index("autognostic_vocab_facet_idx").on(table.facetType),
+}));
 export type AutognosticControlledVocabRow = typeof autognosticControlledVocab.$inferSelect;
 
 // ============================================================================
@@ -294,25 +306,6 @@ export interface SyncLogEntry {
   sourcesSkipped: number;
   documentsAdded: number;
   documentsRemoved: number;
-  errors?: any[];
+  errors?: Array<{ sourceId?: string; error: string }>;
 }
 
-// ============================================================================
-// DATABASE INDEXES
-// ============================================================================
-
-export const autognosticDocumentsUrlIdx = index("autognostic_documents_url_idx").on(autognosticDocuments.url);
-export const autognosticDocumentsSourceVersionIdx = index("autognostic_documents_source_version_idx")
-  .on(autognosticDocuments.sourceId, autognosticDocuments.versionId);
-export const autognosticVersionsSourceStatusIdx = index("autognostic_versions_source_status_idx")
-  .on(autognosticVersions.sourceId, autognosticVersions.status);
-
-// Paper classification indexes
-export const autognosticPaperClassificationDocIdx = index("autognostic_paper_class_doc_idx")
-  .on(autognosticPaperClassification.documentId);
-export const autognosticPaperClassificationZoneIdx = index("autognostic_paper_class_zone_idx")
-  .on(autognosticPaperClassification.zone);
-export const autognosticTaxonomyNodesLevelIdx = index("autognostic_taxonomy_level_idx")
-  .on(autognosticTaxonomyNodes.level);
-export const autognosticControlledVocabFacetIdx = index("autognostic_vocab_facet_idx")
-  .on(autognosticControlledVocab.facetType);

@@ -1,8 +1,9 @@
-import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content } from "@elizaos/core";
 import { requireValidToken, AutognosticAuthError } from "../auth/validateToken";
 import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository";
 import { ReconciliationService } from "../orchestrator/ReconciliationService";
 import type { SourceConfig } from "../orchestrator/SourceConfig";
+import { safeSerialize } from "../utils/safeSerialize";
 
 export const RefreshSourceAction: Action = {
   name: "REFRESH_KNOWLEDGE_SOURCE",
@@ -31,28 +32,28 @@ export const RefreshSourceAction: Action = {
   },
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const text = ((message.content as any)?.text || "").toLowerCase();
+    const text = ((message.content as Content)?.text || "").toLowerCase();
     return /\b(refresh|force|resync|update|sync\s+now).*(source|knowledge)/i.test(text);
   },
 
   async handler(
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: any,
-    _options: any,
-    callback: any
+    _state: State | undefined,
+    _options: HandlerOptions | undefined,
+    callback: HandlerCallback | undefined
   ): Promise<ActionResult> {
-    const args = (_message.content as any) || {};
+    const args = (_message.content as Record<string, unknown>) || {};
 
     try {
-      requireValidToken(runtime, args.authToken);
+      requireValidToken(runtime, args.authToken as string | undefined);
     } catch (err) {
       if (err instanceof AutognosticAuthError) {
         const text = err.message;
         if (callback) {
           await callback({ text, action: "REFRESH_KNOWLEDGE_SOURCE" });
         }
-        return { success: false, text, data: { error: "auth_failed" } };
+        return { success: false, text, data: safeSerialize({ error: "auth_failed" }) };
       }
       throw err;
     }
@@ -63,7 +64,7 @@ export const RefreshSourceAction: Action = {
       if (callback) {
         await callback({ text, action: "REFRESH_KNOWLEDGE_SOURCE" });
       }
-      return { success: false, text, data: { error: "missing_source_id" } };
+      return { success: false, text, data: safeSerialize({ error: "missing_source_id" }) };
     }
 
     const sourcesRepo = new AutognosticSourcesRepository(runtime);
@@ -74,7 +75,7 @@ export const RefreshSourceAction: Action = {
       if (callback) {
         await callback({ text, action: "REFRESH_KNOWLEDGE_SOURCE" });
       }
-      return { success: false, text, data: { error: "source_not_found" } };
+      return { success: false, text, data: safeSerialize({ error: "source_not_found" }) };
     }
 
     try {
@@ -100,7 +101,14 @@ export const RefreshSourceAction: Action = {
       return {
         success: true,
         text,
-        data: { sourceId, result },
+        data: safeSerialize({
+          sourceId,
+          status: result.status,
+          versionId: result.versionId,
+          totalBytes: result.totalBytes,
+          fileCount: result.fileCount,
+          error: result.error,
+        }),
       };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -111,7 +119,7 @@ export const RefreshSourceAction: Action = {
       return {
         success: false,
         text,
-        data: { error: "refresh_failed", details: errMsg },
+        data: safeSerialize({ error: "refresh_failed", details: errMsg }),
       };
     }
   },

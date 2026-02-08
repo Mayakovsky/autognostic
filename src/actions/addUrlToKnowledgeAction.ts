@@ -1,10 +1,12 @@
-import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content, UUID } from "@elizaos/core";
 import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
 import { validateToken, isAuthEnabled } from "../auth/validateToken";
 import { randomUUID } from "crypto";
 import { getScientificPaperDetector } from "../services/ScientificPaperDetector";
 import { createScientificPaperHandler } from "../services/ScientificPaperHandler";
 import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository";
+import { wrapError, ErrorCode } from "../errors";
+import { safeSerialize } from "../utils/safeSerialize";
 
 // Extract URL from message text
 // Supports both full URLs (https://example.com/...) and bare hostnames (example.com/...)
@@ -85,16 +87,19 @@ export const AddUrlToKnowledgeAction: Action = {
 
   // Validate: only trigger if message contains a URL
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const text = (message.content as any)?.text || "";
+    const text = (message.content as Content)?.text || "";
     return extractUrlFromText(text) !== null;
   },
 
   async handler(
     runtime: IAgentRuntime,
     message: Memory,
-    args: any
+    _state: State | undefined,
+    _options: HandlerOptions | undefined,
+    callback: HandlerCallback | undefined
   ): Promise<void | ActionResult | undefined> {
-    const messageText = (message.content as any)?.text || "";
+    const args = (message.content as Record<string, unknown>) || {};
+    const messageText = (message.content as Content)?.text || "";
 
     // Try to get token from args, then from message text
     const providedToken =
@@ -108,28 +113,32 @@ export const AddUrlToKnowledgeAction: Action = {
       // Auth is enabled but token missing or invalid
       if (authResult.needsToken) {
         // Ask the user for the token
+        const text =
+          "Authentication is required to add documents to knowledge. " +
+          "Please provide the auth token. You can say something like: " +
+          '"Add this URL with token: your-token-here" or just provide the token.';
+        if (callback) await callback({ text, action: "ADD_URL_TO_KNOWLEDGE" });
         return {
           success: false,
-          text:
-            "Authentication is required to add documents to knowledge. " +
-            "Please provide the auth token. You can say something like: " +
-            '"Add this URL with token: your-token-here" or just provide the token.',
-          data: {
+          text,
+          data: safeSerialize({
             error: "auth_required",
             authEnabled: true,
             needsToken: true,
-          },
+          }),
         };
       }
 
       // Auth failed for other reason (invalid token, misconfiguration)
+      const authText = authResult.error || "Authentication failed.";
+      if (callback) await callback({ text: authText, action: "ADD_URL_TO_KNOWLEDGE" });
       return {
         success: false,
-        text: authResult.error || "Authentication failed.",
-        data: {
+        text: authText,
+        data: safeSerialize({
           error: "auth_failed",
           authEnabled: authResult.authEnabled,
-        },
+        }),
       };
     }
 
@@ -137,10 +146,12 @@ export const AddUrlToKnowledgeAction: Action = {
     const url = (args.url as string | undefined) || extractUrlFromText(messageText);
 
     if (!url) {
+      const text = "No URL found. Please provide a URL to add to knowledge.";
+      if (callback) await callback({ text, action: "ADD_URL_TO_KNOWLEDGE" });
       return {
         success: false,
-        text: "No URL found. Please provide a URL to add to knowledge.",
-        data: { error: "missing_url" },
+        text,
+        data: safeSerialize({ error: "missing_url" }),
       };
     }
 
@@ -150,8 +161,8 @@ export const AddUrlToKnowledgeAction: Action = {
 
     const filename =
       (args.filename as string) || url.split("/").pop() || "document";
-    const roomId: any =
-      args.roomId || (runtime as any).defaultRoomId || runtime.agentId;
+    const roomId =
+      (args.roomId as UUID | undefined) || (runtime as unknown as Record<string, UUID>).defaultRoomId || runtime.agentId;
 
     try {
       // Step 1: Quick pre-check if this looks like a scientific paper
@@ -248,10 +259,11 @@ export const AddUrlToKnowledgeAction: Action = {
         responseText = `Added ${url} to Knowledge${authStatus}. Full document archived for direct quotes.`;
       }
 
+      if (callback) await callback({ text: responseText, action: "ADD_URL_TO_KNOWLEDGE" });
       return {
         success: true,
         text: responseText,
-        data: {
+        data: safeSerialize({
           url,
           filename,
           roomId,
@@ -271,16 +283,27 @@ export const AddUrlToKnowledgeAction: Action = {
             journal: handlerResult.paperMetadata.journal,
             authors: handlerResult.paperMetadata.authors,
           } : undefined,
-          ...result,
-        },
+          knowledgeDocumentId: result.knowledgeDocumentId,
+          clientDocumentId: result.clientDocumentId,
+          worldId: result.worldId,
+        }),
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
+      const wrappedError = wrapError(error, ErrorCode.INTERNAL, {
+        operation: "ADD_URL_TO_KNOWLEDGE",
+        url,
+      });
+      const errorText = `Failed to add document: ${wrappedError.toUserMessage()}`;
+      if (callback) await callback({ text: errorText, action: "ADD_URL_TO_KNOWLEDGE" });
       return {
         success: false,
-        text: `Failed to add document: ${errorMessage}`,
-        data: { error: "ingestion_failed", details: errorMessage },
+        text: errorText,
+        data: safeSerialize({
+          error: "ingestion_failed",
+          code: wrappedError.code,
+          details: wrappedError.message,
+          isRetryable: wrappedError.isRetryable,
+        }),
       };
     }
   },

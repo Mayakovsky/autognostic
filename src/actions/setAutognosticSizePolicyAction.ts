@@ -1,7 +1,8 @@
-import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions } from "@elizaos/core";
 import { AutognosticSettingsRepository } from "../db/autognosticSettingsRepository";
 import { MIN_AUTO_INGEST_BYTES, DEFAULT_SIZE_POLICY } from "../config/SizePolicy";
 import { requireValidToken, AutognosticAuthError } from "../auth/validateToken";
+import { safeSerialize } from "../utils/safeSerialize";
 
 export const SetAutognosticSizePolicyAction: Action = {
   name: "SET_AUTOGNOSTIC_SIZE_POLICY",
@@ -23,8 +24,11 @@ export const SetAutognosticSizePolicyAction: Action = {
   async handler(
     runtime: IAgentRuntime,
     _message: Memory,
-    args: any
+    _state: State | undefined,
+    _options: HandlerOptions | undefined,
+    callback: HandlerCallback | undefined
   ): Promise<void | ActionResult | undefined> {
+    const args = (_message.content as Record<string, unknown>) || {};
     const authToken = args.authToken as string | undefined;
 
     // Validate auth token before proceeding
@@ -32,10 +36,11 @@ export const SetAutognosticSizePolicyAction: Action = {
       requireValidToken(runtime, authToken);
     } catch (err) {
       if (err instanceof AutognosticAuthError) {
+        if (callback) await callback({ text: err.message, action: "SET_AUTOGNOSTIC_SIZE_POLICY" });
         return {
           success: false,
           text: err.message,
-          data: { error: "auth_failed" },
+          data: safeSerialize({ error: "auth_failed" }),
         };
       }
       throw err;
@@ -46,13 +51,13 @@ export const SetAutognosticSizePolicyAction: Action = {
       (await repo.getPolicy(runtime.agentId)) ?? DEFAULT_SIZE_POLICY;
 
     const autoIngestBelowMB =
-      args.autoIngestBelowMB ?? current.autoIngestBelowBytes / 1024 / 1024;
+      (args.autoIngestBelowMB as number | undefined) ?? current.autoIngestBelowBytes / 1024 / 1024;
     const maxMBHardLimit =
-      args.maxMBHardLimit ?? current.maxBytesHardLimit / 1024 / 1024;
+      (args.maxMBHardLimit as number | undefined) ?? current.maxBytesHardLimit / 1024 / 1024;
 
-    const previewAlways =
+    const previewAlways: boolean =
       typeof args.previewAlways === "boolean"
-        ? (args.previewAlways as boolean)
+        ? args.previewAlways
         : current.previewAlways;
 
     const newPolicy = {
@@ -66,12 +71,14 @@ export const SetAutognosticSizePolicyAction: Action = {
 
     await repo.upsertPolicy(runtime.agentId, newPolicy);
 
+    const text =
+      `Updated size policy: previewAlways=${previewAlways}, ` +
+      `autoIngestBelowMB=${autoIngestBelowMB}, maxMBHardLimit=${maxMBHardLimit}.`;
+    if (callback) await callback({ text, action: "SET_AUTOGNOSTIC_SIZE_POLICY" });
     return {
       success: true,
-      text:
-        `Updated size policy: previewAlways=${previewAlways}, ` +
-        `autoIngestBelowMB=${autoIngestBelowMB}, maxMBHardLimit=${maxMBHardLimit}.`,
-      data: newPolicy,
+      text,
+      data: safeSerialize(newPolicy),
     };
   },
 };

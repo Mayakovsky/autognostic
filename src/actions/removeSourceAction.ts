@@ -1,9 +1,10 @@
-import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content } from "@elizaos/core";
 import { requireValidToken, AutognosticAuthError } from "../auth/validateToken";
 import { getDb } from "../db/getDb";
 import { autognosticSources, autognosticDocuments } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { removeSourceFromKnowledge } from "../integration/removeFromKnowledge";
+import { safeSerialize } from "../utils/safeSerialize";
 
 export const RemoveSourceAction: Action = {
   name: "REMOVE_AUTOGNOSTIC_SOURCE",
@@ -19,28 +20,28 @@ export const RemoveSourceAction: Action = {
   },
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const text = ((message.content as any)?.text || "").toLowerCase();
+    const text = ((message.content as Content)?.text || "").toLowerCase();
     return /\b(remove|delete|unmirror).*(source|mirror|knowledge)/i.test(text);
   },
 
   async handler(
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: any,
-    _options: any,
-    callback: any
+    _state: State | undefined,
+    _options: HandlerOptions | undefined,
+    callback: HandlerCallback | undefined
   ): Promise<ActionResult> {
-    const args = (_message.content as any) || {};
+    const args = (_message.content as Record<string, unknown>) || {};
 
     try {
-      requireValidToken(runtime, args.authToken);
+      requireValidToken(runtime, args.authToken as string | undefined);
     } catch (err) {
       if (err instanceof AutognosticAuthError) {
         const text = err.message;
         if (callback) {
           await callback({ text, action: "REMOVE_AUTOGNOSTIC_SOURCE" });
         }
-        return { success: false, text, data: { error: "auth_failed" } };
+        return { success: false, text, data: safeSerialize({ error: "auth_failed" }) };
       }
       throw err;
     }
@@ -51,7 +52,7 @@ export const RemoveSourceAction: Action = {
       if (callback) {
         await callback({ text, action: "REMOVE_AUTOGNOSTIC_SOURCE" });
       }
-      return { success: false, text, data: { error: "missing_source_id" } };
+      return { success: false, text, data: safeSerialize({ error: "missing_source_id" }) };
     }
 
     // CASCADE: Remove from semantic store (plugin-knowledge) first
@@ -78,7 +79,7 @@ export const RemoveSourceAction: Action = {
     return {
       success: true,
       text,
-      data: { sourceId, removed: true, knowledgeResult },
+      data: safeSerialize({ sourceId, removed: true, knowledgeResult }),
     };
   },
 };

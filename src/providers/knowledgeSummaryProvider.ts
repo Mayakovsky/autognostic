@@ -22,7 +22,7 @@ export const knowledgeSummaryProvider: Provider = {
     const sourcesRepo = new AutognosticSourcesRepository(runtime);
     const docsRepo = new AutognosticDocumentsRepository(runtime);
 
-    let sources: any[] = [];
+    let sources: Awaited<ReturnType<AutognosticSourcesRepository["listEnabled"]>> = [];
     let docCount = 0;
 
     try {

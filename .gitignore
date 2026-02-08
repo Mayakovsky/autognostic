@@ -29,3 +29,9 @@ coverage/
 # Bun
 bun.lockb
 plugin-datamirror/
+
+# Local database (PGlite)
+.eliza/
+
+# Local tool settings
+.claude/settings.local.json

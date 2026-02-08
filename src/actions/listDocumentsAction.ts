@@ -1,5 +1,7 @@
-import type { Action, ActionResult, IAgentRuntime, Memory } from "@elizaos/core";
+import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content } from "@elizaos/core";
 import { AutognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
+import type { AutognosticDocumentsRow } from "../db/schema";
+import { safeSerialize } from "../utils/safeSerialize";
 
 export const ListDocumentsAction: Action = {
   name: "LIST_KNOWLEDGE_DOCUMENTS",
@@ -25,23 +27,23 @@ export const ListDocumentsAction: Action = {
   },
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
-    const text = ((message.content as any)?.text || "").toLowerCase();
+    const text = ((message.content as Content)?.text || "").toLowerCase();
     return /\b(list|show|what).*(document|knowledge|stored|file)/i.test(text);
   },
 
   async handler(
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: any,
-    _options: any,
-    callback: any
+    _state: State | undefined,
+    _options: HandlerOptions | undefined,
+    callback: HandlerCallback | undefined
   ): Promise<ActionResult> {
-    const args = (_message.content as any) || {};
+    const args = (_message.content as Record<string, unknown>) || {};
     const docsRepo = new AutognosticDocumentsRepository(runtime);
 
     const sourceId = args.sourceId as string | undefined;
 
-    const docs = sourceId
+    const docs: AutognosticDocumentsRow[] = sourceId
       ? await docsRepo.listBySourceId(sourceId)
       : await docsRepo.listAll();
 
@@ -52,10 +54,10 @@ export const ListDocumentsAction: Action = {
       if (callback) {
         await callback({ text, action: "LIST_KNOWLEDGE_DOCUMENTS" });
       }
-      return { success: true, text, data: { documents: [] } };
+      return { success: true, text, data: safeSerialize({ documents: [] }) };
     }
 
-    const docSummaries = docs.map((d: any) => ({
+    const docSummaries = docs.map((d) => ({
       url: d.url,
       sourceId: d.sourceId,
       mimeType: d.mimeType,
@@ -63,7 +65,7 @@ export const ListDocumentsAction: Action = {
       createdAt: d.createdAt?.toISOString(),
     }));
 
-    const lines = docSummaries.map((d: any) => {
+    const lines = docSummaries.map((d) => {
       const size = d.byteSize ? `${Math.round(d.byteSize / 1024)}KB` : "?KB";
       return `- ${d.url} (${size}, source: ${d.sourceId})`;
     });
@@ -76,7 +78,7 @@ export const ListDocumentsAction: Action = {
     return {
       success: true,
       text,
-      data: { documents: docSummaries, count: docs.length },
+      data: safeSerialize({ documents: docSummaries, count: docs.length }),
     };
   },
 };

@@ -11,7 +11,7 @@ export async function removeFromKnowledge(
   runtime: IAgentRuntime,
   knowledgeDocumentIds: string[]
 ): Promise<{ removed: number; failed: number }> {
-  const knowledge = runtime.getService<KnowledgeService>("knowledge" as any);
+  const knowledge = runtime.getService<KnowledgeService>("knowledge");
   if (!knowledge) {
     console.warn(
       "[autognostic] KnowledgeService not available for removal. Semantic store may have orphaned entries."
@@ -22,13 +22,16 @@ export async function removeFromKnowledge(
   let removed = 0;
   let failed = 0;
 
+  // Cast to a record to check for optional methods not in the type definition
+  const knowledgeRecord = knowledge as unknown as Record<string, unknown>;
+
   for (const docId of knowledgeDocumentIds) {
     try {
       // Try to remove from plugin-knowledge
-      if (typeof (knowledge as any).removeKnowledge === "function") {
-        await (knowledge as any).removeKnowledge(docId);
-      } else if (typeof (knowledge as any).deleteKnowledge === "function") {
-        await (knowledge as any).deleteKnowledge(docId);
+      if (typeof knowledgeRecord.removeKnowledge === "function") {
+        await (knowledgeRecord.removeKnowledge as (id: string) => Promise<void>)(docId);
+      } else if (typeof knowledgeRecord.deleteKnowledge === "function") {
+        await (knowledgeRecord.deleteKnowledge as (id: string) => Promise<void>)(docId);
       } else {
         console.warn(
           `[autognostic] KnowledgeService does not expose removeKnowledge/deleteKnowledge method. ` +

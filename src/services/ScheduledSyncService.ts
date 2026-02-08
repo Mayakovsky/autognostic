@@ -97,7 +97,7 @@ export class ScheduledSyncService {
       sourcesSkipped: 0,
       documentsAdded: 0,
       documentsRemoved: 0,
-      errors: [] as any[],
+      errors: [] as Array<{ sourceId?: string; error: string }>,
     };
 
     try {
@@ -260,7 +260,7 @@ export class ScheduledSyncService {
       sourcesSkipped?: number;
       documentsAdded?: number;
       documentsRemoved?: number;
-      errors?: any[];
+      errors?: Array<{ sourceId?: string; error: string }>;
     }
   ): Promise<void> {
     try {

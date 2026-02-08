@@ -27,4 +27,21 @@ module.exports = {
     "no-console": "warn",
   },
   ignorePatterns: ["dist/", "node_modules/", "*.js"],
+  overrides: [
+    {
+      // Allow console in service files (intentional logging)
+      files: [
+        "src/services/**/*.ts",
+        "src/index.ts",
+        "src/actions/**/*.ts",
+        "src/orchestrator/**/*.ts",
+        "src/integration/**/*.ts",
+        "src/providers/**/*.ts",
+        "src/utils/**/*.ts",
+      ],
+      rules: {
+        "no-console": "off",
+      },
+    },
+  ],
 };

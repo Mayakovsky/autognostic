@@ -5,9 +5,12 @@
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "packageType": "plugin",
+  "platform": "node",
   "scripts": {
+    "start": "elizaos start",
+    "dev": "elizaos dev",
     "build": "tsc -p tsconfig.json",
-    "dev": "ts-node src/index.ts",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
@@ -15,24 +18,45 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write \"src/**/*.ts\""
   },
-  "peerDependencies": {
-    "@elizaos/core": "*",
-    "@elizaos/plugin-knowledge": "*"
-  },
   "dependencies": {
-    "@octokit/rest": "^21.0.0",
-    "drizzle-orm": "^0.36.0",
+    "@elizaos/core": "1.6.5",
+    "@elizaos/plugin-knowledge": "1.5.15",
+    "@octokit/rest": "^21.1.1",
+    "cors": "^2.8.5",
+    "drizzle-orm": "^0.36.4",
     "node-cron": "^3.0.3"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@elizaos/cli": "1.6.5",
+    "@elizaos/server": "1.6.5",
+    "@elizaos/plugin-sql": "1.6.5",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^20.19.31",
     "@types/node-cron": "^3.0.11",
-    "@typescript-eslint/eslint-plugin": "^6.13.0",
-    "@typescript-eslint/parser": "^6.13.0",
-    "eslint": "^8.55.0",
-    "eslint-config-prettier": "^9.1.0",
-    "prettier": "^3.1.0",
-    "typescript": "^5.6.0",
-    "vitest": "^1.0.0"
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vitest/coverage-v8": "1.6.1",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.2",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "vitest": "^1.6.1"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
