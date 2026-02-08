@@ -1,3 +1,5 @@
+> 📡 Read [heartbeat.md](./heartbeat.md) first for current session state.
+
 # Plugin-Autognostic Development Context
 
 > **CAKC:** Conversational Automated Knowledge Control
@@ -192,7 +194,7 @@ DATABASE_URL=pglite://./data/autognostic.db
 POSTGRES_URL=postgresql://user:pass@host:5432/db
 
 # Optional - GitHub sync
-GITHUB_TOKEN=ghp_xxxxx
+GITHUB_TOKEN=<your-token-here>
 
 # Optional - Crossref
 CROSSREF_EMAIL=your@email.com  # For polite pool

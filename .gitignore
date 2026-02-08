@@ -35,3 +35,6 @@ plugin-datamirror/
 
 # Local tool settings
 .claude/settings.local.json
+
+# SeshMem session metadata
+.seshmem/
