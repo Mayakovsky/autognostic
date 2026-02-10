@@ -23,6 +23,101 @@ export const GetQuoteAction: Action = {
     "LAST_LINE",
     "FIRST_LINE",
   ],
+  // Examples are CRITICAL — ElizaOS's LLM action selector reads these to decide
+  // which action to pick. Without examples, SEND_MESSAGE wins by default.
+  examples: [
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "Repeat the last line of that document",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: 'Last line (line 42): "The results confirm our initial hypothesis."',
+          actions: ["GET_EXACT_QUOTE"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "Read me line 5",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: 'Line 5: "We propose a novel architecture for distributed knowledge systems."',
+          actions: ["GET_EXACT_QUOTE"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "What does that paper say about transformers?",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: 'Found at line 17: "Transformer architectures have shown remarkable scaling properties."',
+          actions: ["GET_EXACT_QUOTE"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "Quote the first line from the document",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: 'Line 1: "Abstract: This paper introduces a framework for autonomous knowledge management."',
+          actions: ["GET_EXACT_QUOTE"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "Read me what it says verbatim",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: 'Full document (2341 chars):\n\nAbstract: This paper introduces...',
+          actions: ["GET_EXACT_QUOTE"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "Copy the text about methodology from that article",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: 'Found at line 24: "Our methodology combines reinforcement learning with symbolic reasoning."',
+          actions: ["GET_EXACT_QUOTE"],
+        },
+      },
+    ],
+  ],
+
   parameters: {
     type: "object",
     properties: {

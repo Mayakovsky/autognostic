@@ -60,6 +60,54 @@ export const AddUrlToKnowledgeAction: Action = {
     "ADD_PAPER",
     "SAVE_PAPER",
   ],
+  examples: [
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "Add this to knowledge: https://arxiv.org/abs/2401.12345",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: "Added to knowledge base. Detected as a scientific paper — classified under Machine Learning > Reinforcement Learning.",
+          actions: ["ADD_URL_TO_KNOWLEDGE"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "Save https://example.com/docs/api-reference.md to the knowledge base",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: "Document added to knowledge base: api-reference.md (1247 lines)",
+          actions: ["ADD_URL_TO_KNOWLEDGE"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{name1}}",
+        content: {
+          text: "Learn this paper https://arxiv.org/abs/2305.99999",
+        },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: "Scientific paper added and classified. Title: \"Scaling Laws for Neural Networks\". Category: Deep Learning > Optimization.",
+          actions: ["ADD_URL_TO_KNOWLEDGE"],
+        },
+      },
+    ],
+  ],
+
   parameters: {
     type: "object",
     properties: {

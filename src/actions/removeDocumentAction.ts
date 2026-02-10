@@ -13,6 +13,35 @@ export const RemoveDocumentAction: Action = {
     "FORGET_DOCUMENT",
     "REMOVE_FROM_KNOWLEDGE",
   ],
+  examples: [
+    [
+      {
+        name: "{{name1}}",
+        content: { text: "Remove https://example.com/old-doc.md from knowledge" },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: "Document removed from knowledge base: old-doc.md",
+          actions: ["REMOVE_KNOWLEDGE_DOCUMENT"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{name1}}",
+        content: { text: "Delete that paper from the knowledge base" },
+      },
+      {
+        name: "{{name2}}",
+        content: {
+          text: "Removed arxiv-2401.12345 from knowledge base (semantic and verbatim stores cleared).",
+          actions: ["REMOVE_KNOWLEDGE_DOCUMENT"],
+        },
+      },
+    ],
+  ],
+
   parameters: {
     type: "object",
     properties: {
