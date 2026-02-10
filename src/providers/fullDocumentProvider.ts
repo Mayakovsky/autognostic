@@ -159,6 +159,8 @@ export const fullDocumentProvider: Provider = {
 
 ## IMPORTANT INSTRUCTIONS
 - You MUST quote ONLY from the document text provided below
+- To retrieve specific lines or quotes, use the GET_EXACT_QUOTE action — do NOT extract lines yourself from this context
+- If the user asks for "line N", "last line", "first line", or similar, ALWAYS call GET_EXACT_QUOTE
 - Do NOT fabricate, guess, or hallucinate any content
 - If the requested content is not in the documents below, say "I don't have access to that specific content"
 - Count words/lines carefully using the actual text provided
