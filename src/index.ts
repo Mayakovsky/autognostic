@@ -1,4 +1,6 @@
 import type { Plugin, IAgentRuntime } from "@elizaos/core";
+import { ModelType } from "@elizaos/core";
+import { ollamaDirectEmbed } from "./providers/ollamaDirectEmbed";
 
 import { HttpService } from "./services/httpService";
 import { GithubService } from "./services/githubService";
@@ -80,6 +82,12 @@ export const autognosticPlugin: Plugin = {
     RefreshSourceAction,
   ],
   providers: [knowledgeSummaryProvider, fullDocumentProvider],
+  // Override plugin-ollama's broken TEXT_EMBEDDING handler (ollama-ai-provider v1
+  // is incompatible with ai SDK v5's spec v2 requirement).
+  // This calls the Ollama REST API directly — proven working in test-embedding.ts.
+  models: {
+    [ModelType.TEXT_EMBEDDING]: ollamaDirectEmbed,
+  },
   schema: autognosticSchema,
 };
 

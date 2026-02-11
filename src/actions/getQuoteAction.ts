@@ -6,9 +6,11 @@ export const GetQuoteAction: Action = {
   name: "GET_EXACT_QUOTE",
   description:
     "Retrieve exact quotes, lines, or text content from a stored knowledge document. No auth required. " +
-    "Use this when the user asks to repeat, read, quote, or retrieve specific text from a document in the knowledge base. " +
-    "This is NOT for sending messages to other users. This is NOT for composing new text. " +
-    "This retrieves EXISTING stored document content only.",
+    "ALWAYS use this action instead of REPLY or SEND_MESSAGE when the user asks about document content. " +
+    "Triggers: quote, read, repeat, print, show, retrieve, 'what does it say', 'last line', 'first line', " +
+    "'give me the text', 'contents of', 'full document'. " +
+    "Do NOT attempt to recall document content from conversation context — only this action can retrieve it accurately. " +
+    "This is the ONLY way to get stored document content. REPLY cannot access documents.",
   similes: [
     "QUOTE_FROM",
     "GET_LINE",
@@ -135,7 +137,7 @@ export const GetQuoteAction: Action = {
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
     const text = ((message.content as Content)?.text || "").toLowerCase();
-    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word)|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content))/i.test(text);
+    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+words?)|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper))/i.test(text);
   },
 
   async handler(
@@ -269,6 +271,13 @@ export const GetQuoteAction: Action = {
       return { success: true, text, data: safeSerialize(result as unknown as Record<string, unknown>) };
     }
 
+    // Default fallback: if user asked generically ("print the document", "show me"), retrieve full doc
+    const fallbackContent = await getFullDocument(runtime, url);
+    if (fallbackContent) {
+      const text = `Full document (${fallbackContent.length} chars):\n\n${fallbackContent.slice(0, 5000)}${fallbackContent.length > 5000 ? "\n...[truncated]" : ""}`;
+      if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
+      return { success: true, text, data: safeSerialize({ url, charCount: fallbackContent.length, mode: "full-fallback" }) };
+    }
     const text = "Specify what to retrieve: a line number, search text in quotes, 'last line', or 'full' document.";
     if (callback) await callback({ text, action: "GET_EXACT_QUOTE" });
     return { success: false, text, data: safeSerialize({ error: "invalid_params" }) };

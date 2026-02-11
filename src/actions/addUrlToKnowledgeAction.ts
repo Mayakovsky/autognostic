@@ -300,11 +300,11 @@ export const AddUrlToKnowledgeAction: Action = {
           : "";
         
         responseText = 
-          `Added scientific paper to Knowledge${authStatus}.${titleInfo}\n` +
+          `[STORED] Scientific paper added to knowledge base${authStatus}.${titleInfo}\n` +
           `${zoneEmoji} Lakehouse Zone: ${handlerResult.zone.toUpperCase()}${domainInfo}\n` +
-          `Full document archived with classification metadata.`;
+          `Use GET_EXACT_QUOTE to retrieve content.`;
       } else {
-        responseText = `Added ${url} to Knowledge${authStatus}. Full document archived for direct quotes.`;
+        responseText = `[STORED] ${url.split("/").pop() || url} — added to knowledge base${authStatus}. Use GET_EXACT_QUOTE to retrieve content.`;
       }
 
       if (callback) await callback({ text: responseText, action: "ADD_URL_TO_KNOWLEDGE" });
