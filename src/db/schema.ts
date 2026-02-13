@@ -95,6 +95,7 @@ export const autognosticDocuments = autognostic.table("documents", {
   contentHash: text("content_hash").notNull(),
   mimeType: text("mime_type"),
   byteSize: integer("byte_size"),
+  profile: jsonb("profile").$type<import("../services/DocumentAnalyzer.types").DocumentProfile | null>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   urlIdx: index("autognostic_documents_url_idx").on(table.url),

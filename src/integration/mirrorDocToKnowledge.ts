@@ -4,6 +4,7 @@ import { HttpService } from "../services/httpService";
 import { randomUUID, createHash } from "crypto";
 import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
 import { withRetry } from "../utils/retry";
+import { analyzeDocument } from "../services/DocumentAnalyzer";
 
 /**
  * Convert URLs to their raw content equivalents.
@@ -134,6 +135,14 @@ export async function mirrorDocToKnowledge(
       byteSize: Buffer.byteLength(content, "utf8"),
     });
 
+    // Compute and store structural profile for retrieval
+    try {
+      const profile = analyzeDocument(content);
+      await autognosticDocumentsRepository.updateProfile(runtime, params.url, profile);
+    } catch (err) {
+      console.debug(`[autognostic] Profile analysis failed (non-fatal):`, err);
+    }
+
     // Also store with raw URL if different (for flexible lookup)
     if (rawUrl !== params.url) {
       try {
@@ -146,6 +155,11 @@ export async function mirrorDocToKnowledge(
           mimeType: contentType,
           byteSize: Buffer.byteLength(content, "utf8"),
         });
+        // Also store profile for raw URL variant
+        try {
+          const profile = analyzeDocument(content);
+          await autognosticDocumentsRepository.updateProfile(runtime, rawUrl, profile);
+        } catch { /* non-fatal */ }
       } catch (err) {
         // Ignore duplicate key errors - rawUrl might already exist
         console.debug(`[autognostic] Could not store raw URL entry:`, err);

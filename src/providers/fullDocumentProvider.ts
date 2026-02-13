@@ -3,6 +3,7 @@ import { autognosticDocuments } from "../db/schema";
 import { getDb } from "../db/getDb";
 import { desc } from "drizzle-orm";
 import { PROVIDER_DEFAULTS } from "../config/constants";
+import type { DocumentProfile } from "../services/DocumentAnalyzer.types";
 
 /**
  * FullDocumentProvider — ROUTING ONLY
@@ -28,20 +29,23 @@ export const fullDocumentProvider: Provider = {
     let documentInventory: Array<{
       url: string;
       byteSize: number | null;
+      profile: DocumentProfile | null;
       createdAt: Date | null;
     }> = [];
 
     try {
       const db = await getDb(runtime);
-      documentInventory = await db
+      const rows = await db
         .select({
           url: autognosticDocuments.url,
           byteSize: autognosticDocuments.byteSize,
+          profile: autognosticDocuments.profile,
           createdAt: autognosticDocuments.createdAt,
         })
         .from(autognosticDocuments)
         .orderBy(desc(autognosticDocuments.createdAt))
         .limit(PROVIDER_DEFAULTS.MAX_INVENTORY_SIZE);
+      documentInventory = rows as typeof documentInventory;
     } catch (error) {
       console.error(`[autognostic] Failed to fetch document inventory:`, error);
     }
@@ -68,6 +72,12 @@ export const fullDocumentProvider: Provider = {
       const date = doc.createdAt
         ? doc.createdAt.toISOString().split("T")[0]
         : "unknown";
+
+      // Include structural stats from profile if available
+      if (doc.profile) {
+        const p = doc.profile;
+        return `- ${filename} (${size}KB, ${p.wordCount} words, ${p.sentenceCount} sentences, ${p.paragraphCount} paragraphs, added ${date})`;
+      }
       return `- ${filename} (${size}KB, added ${date})`;
     });
 
@@ -77,9 +87,10 @@ ${inventoryLines.join("\n")}
 
 ## RETRIEVAL INSTRUCTIONS
 - To quote, read, or retrieve ANY content from these documents: use the GET_EXACT_QUOTE action.
+- Supported modes: full document, specific line, line range, last/first N sentences, paragraph N, search text, word count/stats.
 - Do NOT attempt to recall or reproduce document content from memory.
 - Do NOT use REPLY to answer questions about document content.
-- If the user asks "what does it say", "read me", "quote", "print", "show contents", "last line", etc. → GET_EXACT_QUOTE.
+- If the user asks "what does it say", "read me", "quote", "print", "show contents", "last sentence", "how many words", "paragraph 3" → GET_EXACT_QUOTE.
 - You do NOT have document content in this context. Only GET_EXACT_QUOTE can retrieve it.`;
 
     return {
@@ -91,6 +102,9 @@ ${inventoryLines.join("\n")}
           filename: d.url.split("/").pop(),
           url: d.url,
           byteSize: d.byteSize,
+          wordCount: d.profile?.wordCount ?? null,
+          sentenceCount: d.profile?.sentenceCount ?? null,
+          paragraphCount: d.profile?.paragraphCount ?? null,
         })),
       },
     };

@@ -9,6 +9,15 @@ vi.mock("../src/integration/getExactQuote", () => ({
   getFullDocument: vi.fn(),
 }));
 
+// Mock the repository for profile-aware handler
+vi.mock("../src/db/autognosticDocumentsRepository", () => ({
+  autognosticDocumentsRepository: {
+    getWithProfile: vi.fn().mockResolvedValue(null),
+    updateProfile: vi.fn().mockResolvedValue(undefined),
+    getFullContent: vi.fn().mockResolvedValue(null),
+  },
+}));
+
 // Mock the DB modules used by the handler's fallback URL lookup
 vi.mock("../src/db/getDb", () => ({
   getDb: vi.fn().mockResolvedValue({
@@ -120,6 +129,39 @@ describe("GetQuoteAction", () => {
       );
       expect(result).toBe(false);
     });
+
+    // New validate tests for profile-aware modes
+    it("should match 'how many words'", async () => {
+      const result = await GetQuoteAction.validate!(
+        runtime as any,
+        createMessage("how many words are in the document")
+      );
+      expect(result).toBe(true);
+    });
+
+    it("should match 'last two sentences'", async () => {
+      const result = await GetQuoteAction.validate!(
+        runtime as any,
+        createMessage("give me the last two sentences")
+      );
+      expect(result).toBe(true);
+    });
+
+    it("should match 'paragraph 3'", async () => {
+      const result = await GetQuoteAction.validate!(
+        runtime as any,
+        createMessage("show me paragraph 3")
+      );
+      expect(result).toBe(true);
+    });
+
+    it("should match 'lines 5 through 10'", async () => {
+      const result = await GetQuoteAction.validate!(
+        runtime as any,
+        createMessage("read lines 5 through 10")
+      );
+      expect(result).toBe(true);
+    });
   });
 
   describe("handler", () => {
@@ -131,8 +173,11 @@ describe("GetQuoteAction", () => {
     });
 
     it("should resolve 'last line' mode from natural language", async () => {
-      const { getFullDocument } = await import("../src/integration/getExactQuote");
-      (getFullDocument as any).mockResolvedValue("Line one\nLine two\nLine three\nThe final line");
+      const { autognosticDocumentsRepository } = await import("../src/db/autognosticDocumentsRepository");
+      (autognosticDocumentsRepository.getWithProfile as any).mockResolvedValue({
+        content: "Line one\nLine two\nLine three\nThe final line",
+        profile: null,
+      });
 
       const runtime = createMockRuntime();
       const message = createMessage(
@@ -155,8 +200,11 @@ describe("GetQuoteAction", () => {
     });
 
     it("should resolve 'first line' to lineNumber 1", async () => {
-      const { getLineContent } = await import("../src/integration/getExactQuote");
-      (getLineContent as any).mockResolvedValue("This is the first line");
+      const { autognosticDocumentsRepository } = await import("../src/db/autognosticDocumentsRepository");
+      (autognosticDocumentsRepository.getWithProfile as any).mockResolvedValue({
+        content: "This is the first line\nSecond line",
+        profile: null,
+      });
 
       const runtime = createMockRuntime();
       const message = createMessage(
@@ -173,20 +221,19 @@ describe("GetQuoteAction", () => {
       );
 
       expect(mockCallback).toHaveBeenCalled();
-      expect((getLineContent as any)).toHaveBeenCalledWith(
-        expect.anything(),
-        "https://example.com/doc.txt",
-        1
-      );
+      const callText = mockCallback.mock.calls[0][0].text;
+      expect(callText).toContain("This is the first line");
       expect((result as any).success).toBe(true);
     });
 
     it("should extract URL from message text when not in structured args", async () => {
-      const { getFullDocument } = await import("../src/integration/getExactQuote");
-      (getFullDocument as any).mockResolvedValue("Some content\nLast one");
+      const { autognosticDocumentsRepository } = await import("../src/db/autognosticDocumentsRepository");
+      (autognosticDocumentsRepository.getWithProfile as any).mockResolvedValue({
+        content: "Some content\nLast one",
+        profile: null,
+      });
 
       const runtime = createMockRuntime();
-      // URL only in text, not in structured args
       const message = createMessage(
         "repeat the last line from https://example.com/test.md"
       );
@@ -219,6 +266,81 @@ describe("GetQuoteAction", () => {
       const callText = mockCallback.mock.calls[0][0].text;
       expect(callText).toContain("No document URL found");
       expect((result as any).success).toBe(false);
+    });
+
+    it("should return stats when asked 'how many words'", async () => {
+      const { autognosticDocumentsRepository } = await import("../src/db/autognosticDocumentsRepository");
+      (autognosticDocumentsRepository.getWithProfile as any).mockResolvedValue({
+        content: "Hello world. Goodbye.",
+        profile: {
+          charCount: 21, wordCount: 3, lineCount: 1, nonBlankLineCount: 1,
+          sentenceCount: 2, paragraphCount: 1,
+          sentences: [], paragraphs: [], lines: [],
+          firstSentence: "Hello world.", lastSentence: "Goodbye.",
+          avgWordsPerSentence: 1.5, avgSentencesPerParagraph: 2,
+          analyzedAt: "2026-01-01T00:00:00.000Z", analyzerVersion: "1.0",
+        },
+      });
+
+      const runtime = createMockRuntime();
+      const message = createMessage(
+        "how many words are in https://example.com/doc.txt",
+        { url: "https://example.com/doc.txt" }
+      );
+
+      const result = await GetQuoteAction.handler(
+        runtime as any,
+        message,
+        undefined,
+        undefined,
+        mockCallback
+      );
+
+      expect(mockCallback).toHaveBeenCalled();
+      const callText = mockCallback.mock.calls[0][0].text;
+      expect(callText).toContain("3 words");
+      expect(callText).toContain("2 sentences");
+      expect((result as any).success).toBe(true);
+    });
+
+    it("should return last N sentences when asked", async () => {
+      const { autognosticDocumentsRepository } = await import("../src/db/autognosticDocumentsRepository");
+      (autognosticDocumentsRepository.getWithProfile as any).mockResolvedValue({
+        content: "First sentence. Second sentence. Third sentence.",
+        profile: {
+          charCount: 48, wordCount: 6, lineCount: 1, nonBlankLineCount: 1,
+          sentenceCount: 3, paragraphCount: 1,
+          sentences: [
+            { index: 0, start: 0, end: 15, lineNumber: 1, wordCount: 2, text: "First sentence." },
+            { index: 1, start: 16, end: 32, lineNumber: 1, wordCount: 2, text: "Second sentence." },
+            { index: 2, start: 33, end: 48, lineNumber: 1, wordCount: 2, text: "Third sentence." },
+          ],
+          paragraphs: [], lines: [],
+          firstSentence: "First sentence.", lastSentence: "Third sentence.",
+          avgWordsPerSentence: 2, avgSentencesPerParagraph: 3,
+          analyzedAt: "2026-01-01T00:00:00.000Z", analyzerVersion: "1.0",
+        },
+      });
+
+      const runtime = createMockRuntime();
+      const message = createMessage(
+        "give me the last two sentences from https://example.com/doc.txt",
+        { url: "https://example.com/doc.txt" }
+      );
+
+      const result = await GetQuoteAction.handler(
+        runtime as any,
+        message,
+        undefined,
+        undefined,
+        mockCallback
+      );
+
+      expect(mockCallback).toHaveBeenCalled();
+      const callText = mockCallback.mock.calls[0][0].text;
+      expect(callText).toContain("Second sentence.");
+      expect(callText).toContain("Third sentence.");
+      expect((result as any).success).toBe(true);
     });
   });
 });

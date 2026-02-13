@@ -26,3 +26,16 @@ export const DB_DEFAULTS = {
   CONNECTION_TIMEOUT_MS: 20_000,
   POLL_INTERVAL_MS: 250,
 } as const;
+
+export const ANALYZER_DEFAULTS = {
+  /** Max sentence boundaries stored in profile (first/last 100 kept when exceeded) */
+  MAX_SENTENCES: 10_000,
+  /** Max line boundaries stored in profile */
+  MAX_LINES: 50_000,
+  /** Max paragraph boundaries stored in profile */
+  MAX_PARAGRAPHS: 5_000,
+  /** Entries kept at each end when capping */
+  CAP_KEEP: 100,
+  /** Current analyzer version for migration tracking */
+  VERSION: "1.0",
+} as const;
