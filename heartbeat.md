@@ -1,8 +1,8 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-13 17:24 (local)
-> Updated by: human + claude-pro
-> Session label: document analyzer + real agent testing environment
-> Staleness gate: 2026-02-13 — if today is >3 days past this,
+> Last updated: 2026-02-14 17:49 (local)
+> Updated by: claude-code (opus 4.6)
+> Session label: anthropic model fix + agent diagnostics
+> Staleness gate: 2026-02-14 — if today is >3 days past this,
 >   verify state before acting (see Section 3 of SeshMem schema).
 
 ## Focus (1-3 goals, testable)
@@ -27,9 +27,12 @@
   - Symptom: `"mode": "full-fallback"` in response
   - Suspected cause: Regex doesn't match `last N sentences` pattern (only `last sentence`)
   - Fix: DocumentAnalyzer handler rewrite should resolve (Phase 4 of DOCUMENT-ANALYZER-PLAN.md)
-- ❌ Anthropic model string `claude-3-5-haiku-20241022` caused reflection errors
-  - Symptom: `error=model: claude-3-5-haiku-20241022` in logs
-  - Fix: Changed to `claude-3-5-haiku-latest` in .env — needs verification
+- ✅ ~~Anthropic model errors~~ — FIXED 2026-02-14
+  - Root cause 1: `character.settings.secrets` was `{}` — runtime.getSetting() never checked process.env
+  - Root cause 2: All Claude 3.5 model names retired by Anthropic API (`not_found_error`)
+  - Fix: Populated secrets from process.env in character.ts + updated .env models:
+    - Small: `claude-haiku-4-5-20251001` (was `claude-3-5-haiku-latest`)
+    - Large: `claude-sonnet-4-20250514` (was `claude-3-5-sonnet-latest`)
 
 ## Next Actions (ordered)
 1. Test DocumentAnalyzer in live agent: stats, last-N, paragraph modes → `elizaos dev` from autognostic-agent/
@@ -41,11 +44,11 @@
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-14 | Mayakovsky | docs: update heartbeat — Anthropic model errors fixed | f19cc56 |
+| 2026-02-14 | claude-code | Fix Anthropic model errors: secrets + retired model names | autognostic-agent changes (no git) |
 | 2026-02-13 | Mayakovsky | docs: update heartbeat, add document analyzer plan and imple | 35fdadb |
 | 2026-02-13 | claude-code | DocumentAnalyzer: sentence/paragraph/line profiling | 81dd659 — 147/147 tests pass |
 | 2026-02-12 | claude-pro | Real agent scaffold (autognostic-agent/) | Atlas running, plugin loads via file: ref |
-| 2026-02-12 | claude-pro | Direct Ollama embedding provider | Bypasses broken ai SDK v5 / ollama-ai-provider v1 |
-| 2026-02-12 | claude-pro | Action routing fixes: provider rewrite, callback cleanup | Stops LLM confabulation from context pollution |
 
 ## Guardrails (DO / DON'T)
 DO:
