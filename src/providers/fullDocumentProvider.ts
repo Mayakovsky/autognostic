@@ -86,11 +86,15 @@ export const fullDocumentProvider: Provider = {
 ${inventoryLines.join("\n")}
 
 ## RETRIEVAL INSTRUCTIONS
-- To quote, read, or retrieve ANY content from these documents: use the GET_EXACT_QUOTE action.
-- Supported modes: full document, specific line, line range, last/first N sentences, paragraph N, search text, word count/stats.
+- To quote, read, search, or retrieve ANY content from these documents: use GET_EXACT_QUOTE.
+- Supported: full document, specific line, line/sentence/paragraph range, last/first N units,
+  ordinal access (third paragraph, 5th sentence), search by topic, multi-match search,
+  word count/stats, document length, opening/conclusion.
 - Do NOT attempt to recall or reproduce document content from memory.
 - Do NOT use REPLY to answer questions about document content.
-- If the user asks "what does it say", "read me", "quote", "print", "show contents", "last sentence", "how many words", "paragraph 3" → GET_EXACT_QUOTE.
+- If the user asks "what does it say", "read me", "quote", "print", "show contents",
+  "last sentence", "how many words", "paragraph 3", "find X", "how does it end",
+  "the third paragraph", "is X mentioned" -> GET_EXACT_QUOTE.
 - You do NOT have document content in this context. Only GET_EXACT_QUOTE can retrieve it.`;
 
     return {
