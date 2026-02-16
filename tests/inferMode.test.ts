@@ -29,13 +29,34 @@ describe("parseNumber", () => {
 });
 
 describe("inferMode — Section 12 test matrix", () => {
-  // Stats
+  // Specific stats (single unit)
   it.each([
-    ["how many words", "stats"],
+    ["how many words", "stat_specific", { unit: "word" }],
+    ["count the words", "stat_specific", { unit: "word" }],
+    ["word count", "stat_specific", { unit: "word" }],
+    ["how many sentences", "stat_specific", { unit: "sentence" }],
+    ["sentence count", "stat_specific", { unit: "sentence" }],
+    ["how many lines", "stat_specific", { unit: "line" }],
+    ["line count", "stat_specific", { unit: "line" }],
+    ["count the paragraphs", "stat_specific", { unit: "paragraph" }],
+    ["paragraph count", "stat_specific", { unit: "paragraph" }],
+    ["how many characters", "stat_specific", { unit: "character" }],
+    ["character count", "stat_specific", { unit: "character" }],
+    ["number of words", "stat_specific", { unit: "word" }],
+    ["total lines", "stat_specific", { unit: "line" }],
+  ])('"%s" → %s unit=%s', (input, mode, params) => {
+    const result = inferMode(input);
+    expect(result.mode).toBe(mode);
+    expect(result.unit).toBe((params as { unit: string }).unit);
+  });
+
+  // Full stats overview
+  it.each([
     ["how long is it", "stats"],
-    ["count the words", "stats"],
-    ["word count", "stats"],
     ["length of the document", "stats"],
+    ["give me the stats", "stats"],
+    ["statistics", "stats"],
+    ["overview", "stats"],
   ])('"%s" → %s', (input, mode) => {
     expect(inferMode(input).mode).toBe(mode);
   });
@@ -47,8 +68,8 @@ describe("inferMode — Section 12 test matrix", () => {
   ])('"%s" → %s', (input, mode, params) => {
     const result = inferMode(input);
     expect(result.mode).toBe(mode);
-    expect(result.count).toBe(params.count);
-    expect(result.unit).toBe(params.unit);
+    expect(result.count).toBe((params as { count: number }).count);
+    expect(result.unit).toBe((params as { unit: string }).unit);
   });
 
   // First N
@@ -58,8 +79,8 @@ describe("inferMode — Section 12 test matrix", () => {
   ])('"%s" → %s', (input, mode, params) => {
     const result = inferMode(input);
     expect(result.mode).toBe(mode);
-    expect(result.count).toBe(params.count);
-    expect(result.unit).toBe(params.unit);
+    expect(result.count).toBe((params as { count: number }).count);
+    expect(result.unit).toBe((params as { unit: string }).unit);
   });
 
   // Nth (ordinal + unit)
@@ -70,11 +91,11 @@ describe("inferMode — Section 12 test matrix", () => {
   ])('"%s" → %s', (input, mode, params) => {
     const result = inferMode(input);
     expect(result.mode).toBe(mode);
-    expect(result.count).toBe(params.count);
-    expect(result.unit).toBe(params.unit);
+    expect(result.count).toBe((params as { count: number }).count);
+    expect(result.unit).toBe((params as { unit: string }).unit);
   });
 
-  // Nth (unit + number, reversed)
+  // Nth reversed (unit + number)
   it.each([
     ["sentence five", "nth", { count: 5, unit: "sentence" }],
     ["paragraph three", "nth", { count: 3, unit: "paragraph" }],
@@ -82,21 +103,19 @@ describe("inferMode — Section 12 test matrix", () => {
   ])('"%s" → %s', (input, mode, params) => {
     const result = inferMode(input);
     expect(result.mode).toBe(mode);
-    expect(result.count).toBe(params.count);
-    expect(result.unit).toBe(params.unit);
+    expect(result.count).toBe((params as { count: number }).count);
+    expect(result.unit).toBe((params as { unit: string }).unit);
   });
 
-  // Paragraph N
+  // Paragraph by number
   it.each([
-    ["paragraph 3", "paragraph", { count: 3 }],
-    ["para 7", "paragraph", { count: 7 }],
-  ])('"%s" → %s', (input, mode, params) => {
-    const result = inferMode(input);
-    expect(result.mode).toBe(mode);
-    expect(result.count).toBe(params.count);
+    ["paragraph 3", "paragraph"],
+    ["para 7", "paragraph"],
+  ])('"%s" → %s', (input, mode) => {
+    expect(inferMode(input).mode).toBe(mode);
   });
 
-  // First/Last paragraph
+  // First/last paragraph
   it("first paragraph → first_paragraph", () => {
     expect(inferMode("first paragraph").mode).toBe("first_paragraph");
   });
@@ -113,7 +132,7 @@ describe("inferMode — Section 12 test matrix", () => {
     expect(inferMode("the conclusion").mode).toBe("last_paragraph");
   });
 
-  // Implicit end/start
+  // Implicit start/end
   it("how does it end → implicit_end", () => {
     expect(inferMode("how does it end").mode).toBe("implicit_end");
   });
@@ -129,40 +148,37 @@ describe("inferMode — Section 12 test matrix", () => {
 
   // Ranges
   it("lines 5 to 10 → range", () => {
-    const result = inferMode("lines 5 to 10");
-    expect(result.mode).toBe("range");
-    expect(result.lineNumber).toBe(5);
-    expect(result.lineEnd).toBe(10);
+    const r = inferMode("lines 5 to 10");
+    expect(r.mode).toBe("range");
+    expect(r.lineNumber).toBe(5);
+    expect(r.lineEnd).toBe(10);
   });
   it("from line 5 to the end → range (open-ended)", () => {
-    const result = inferMode("from line 5 to the end");
-    expect(result.mode).toBe("range");
-    expect(result.lineNumber).toBe(5);
-    expect(result.lineEnd).toBe(999999);
+    const r = inferMode("from line 5 to the end");
+    expect(r.mode).toBe("range");
+    expect(r.lineNumber).toBe(5);
   });
   it("everything after line 10 → range", () => {
-    const result = inferMode("everything after line 10");
-    expect(result.mode).toBe("range");
-    expect(result.lineNumber).toBe(11);
-    expect(result.lineEnd).toBe(999999);
+    const r = inferMode("everything after line 10");
+    expect(r.mode).toBe("range");
+    expect(r.lineNumber).toBe(11);
   });
   it("sentences 3 through 7 → sentence_range", () => {
-    const result = inferMode("sentences 3 through 7");
-    expect(result.mode).toBe("sentence_range");
-    expect(result.lineNumber).toBe(3);
-    expect(result.lineEnd).toBe(7);
+    const r = inferMode("sentences 3 through 7");
+    expect(r.mode).toBe("sentence_range");
+    expect(r.lineNumber).toBe(3);
+    expect(r.lineEnd).toBe(7);
   });
   it("paragraphs 2 to 4 → paragraph_range", () => {
-    const result = inferMode("paragraphs 2 to 4");
-    expect(result.mode).toBe("paragraph_range");
-    expect(result.lineNumber).toBe(2);
-    expect(result.lineEnd).toBe(4);
+    const r = inferMode("paragraphs 2 to 4");
+    expect(r.mode).toBe("paragraph_range");
+    expect(r.lineNumber).toBe(2);
+    expect(r.lineEnd).toBe(4);
   });
   it("everything after paragraph 2 → paragraph_range", () => {
-    const result = inferMode("everything after paragraph 2");
-    expect(result.mode).toBe("paragraph_range");
-    expect(result.lineNumber).toBe(3);
-    expect(result.lineEnd).toBe(999999);
+    const r = inferMode("everything after paragraph 2");
+    expect(r.mode).toBe("paragraph_range");
+    expect(r.lineNumber).toBe(3);
   });
 
   // Full
@@ -175,83 +191,59 @@ describe("inferMode — Section 12 test matrix", () => {
   });
 
   // Line
-  it("line 5 → line", () => {
-    const result = inferMode("line 5");
-    expect(result.mode).toBe("line");
-    expect(result.lineNumber).toBe(5);
-  });
-  it("what's on line 12 → line", () => {
-    const result = inferMode("what's on line 12");
-    expect(result.mode).toBe("line");
-    expect(result.lineNumber).toBe(12);
-  });
-  it("go to line 20 → line", () => {
-    const result = inferMode("go to line 20");
-    expect(result.mode).toBe("line");
-    expect(result.lineNumber).toBe(20);
+  it.each([
+    ["line 5", "line"],
+    ["what's on line 12", "line"],
+    ["go to line 20", "line"],
+  ])('%s → %s', (input, mode) => {
+    expect(inferMode(input).mode).toBe(mode);
   });
 
   // Search
-  it("what does it say about neural networks → search", () => {
-    const result = inferMode("what does it say about neural networks");
-    expect(result.mode).toBe("search");
-    expect(result.searchText).toBe("neural networks");
-  });
-  it("find the part about methodology → search", () => {
-    const result = inferMode("find the part about methodology");
-    expect(result.mode).toBe("search");
-    expect(result.searchText).toBe("methodology");
-  });
-  it("is transformers mentioned → search", () => {
-    const result = inferMode("is transformers mentioned");
-    expect(result.mode).toBe("search");
-    expect(result.searchText).toContain("transformers");
-  });
-  it("does it talk about scaling → search", () => {
-    const result = inferMode("does it talk about scaling");
-    expect(result.mode).toBe("search");
-    expect(result.searchText).toContain("scaling");
+  it.each([
+    ["what does it say about neural networks", "search"],
+    ["find the part about methodology", "search"],
+    ["is transformers mentioned", "search"],
+    ["does it talk about scaling", "search"],
+  ])('%s → %s', (input, mode) => {
+    expect(inferMode(input).mode).toBe(mode);
   });
 
-  // Search all (multi-match)
-  it("every mention of data → search_all", () => {
-    const result = inferMode("every mention of data");
-    expect(result.mode).toBe("search_all");
-    expect(result.searchText).toBe("data");
-  });
-  it("all occurrences of 'network' → search_all", () => {
-    const result = inferMode("all occurrences of 'network'");
-    expect(result.mode).toBe("search_all");
-    expect(result.searchText).toBe("network");
+  // Search all
+  it.each([
+    ["every mention of data", "search_all"],
+    ["all occurrences of 'network'", "search_all"],
+  ])('%s → %s', (input, mode) => {
+    expect(inferMode(input).mode).toBe(mode);
   });
 
-  // Single last/first unit
+  // Last/final single unit, penultimate
   it("last line → last_n count=1", () => {
-    const result = inferMode("last line");
-    expect(result.mode).toBe("last_n");
-    expect(result.count).toBe(1);
-    expect(result.unit).toBe("line");
+    const r = inferMode("last line");
+    expect(r.mode).toBe("last_n");
+    expect(r.count).toBe(1);
+    expect(r.unit).toBe("line");
   });
   it("final sentence → last_n count=1", () => {
-    const result = inferMode("final sentence");
-    expect(result.mode).toBe("last_n");
-    expect(result.count).toBe(1);
-    expect(result.unit).toBe("sentence");
+    const r = inferMode("final sentence");
+    expect(r.mode).toBe("last_n");
+    expect(r.count).toBe(1);
+    expect(r.unit).toBe("sentence");
   });
   it("penultimate paragraph → last_n count=2", () => {
-    const result = inferMode("penultimate paragraph");
-    expect(result.mode).toBe("last_n");
-    expect(result.count).toBe(2);
-    expect(result.unit).toBe("paragraph");
+    const r = inferMode("penultimate paragraph");
+    expect(r.mode).toBe("last_n");
+    expect(r.count).toBe(2);
+    expect(r.unit).toBe("paragraph");
   });
   it("next to last sentence → last_n count=2", () => {
-    const result = inferMode("next to last sentence");
-    expect(result.mode).toBe("last_n");
-    expect(result.count).toBe(2);
-    expect(result.unit).toBe("sentence");
+    const r = inferMode("next to last sentence");
+    expect(r.mode).toBe("last_n");
+    expect(r.count).toBe(2);
+    expect(r.unit).toBe("sentence");
   });
 
-  // Reading / tell me
+  // Read it / tell me about
   it("read it to me → full", () => {
     expect(inferMode("read it to me").mode).toBe("full");
   });

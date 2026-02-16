@@ -1,5 +1,5 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-15 08:09 (local)
+> Last updated: 2026-02-15 21:21 (local)
 > Updated by: claude-code (opus 4.6)
 > Session label: anthropic model fix + agent diagnostics
 > Staleness gate: 2026-02-15 — if today is >3 days past this,
@@ -44,11 +44,11 @@
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-15 | Mayakovsky | feat: split stats into stat_specific and stats modes — 214 | ae2a4e8 |
 | 2026-02-15 | Mayakovsky | feat: complete natural language retrieval — ordinals, sear | f12386b |
 | 2026-02-14 | Mayakovsky | docs: update heartbeat — Anthropic model errors fixed | f19cc56 |
 | 2026-02-14 | claude-code | Fix Anthropic model errors: secrets + retired model names | autognostic-agent changes (no git) |
 | 2026-02-13 | Mayakovsky | docs: update heartbeat, add document analyzer plan and imple | 35fdadb |
-| 2026-02-13 | claude-code | DocumentAnalyzer: sentence/paragraph/line profiling | 81dd659 — 147/147 tests pass |
 
 ## Guardrails (DO / DON'T)
 DO:

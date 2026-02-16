@@ -70,6 +70,13 @@ const ORD_WORDS = "first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|te
 const UNIT_PAT = "sentences?|paragraphs?|words?|lines?";
 const UNIT_SINGULAR = "sentence|paragraph|line|word";
 
+/** Normalize a captured stat unit to its canonical form */
+function normalizeStatUnit(raw: string): string {
+  const lower = raw.toLowerCase().replace(/s$/, "");
+  if (lower === "char") return "character";
+  return lower;
+}
+
 /** Clean searchText extracted from natural language */
 function cleanSearchText(raw: string): string {
   return raw
@@ -91,11 +98,37 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
 
   const text = messageText;
 
-  // --- Priority 1: Stats ---
-  if (/how\s+many\s+(words?|lines?|sentences?|paragraphs?)/i.test(text) ||
-      /word\s+count/i.test(text) ||
-      /\bstatistics?\b|\bstats\b/i.test(text) ||
-      /count\s+the\s+(words?|lines?|sentences?|paragraphs?)/i.test(text) ||
+  // --- Priority 1a: Specific stat — user asked about ONE unit ---
+  // "how many words", "how many lines", "how many sentences", "how many paragraphs", "how many characters"
+  const howManyMatch = text.match(/how\s+many\s+(words?|lines?|sentences?|paragraphs?|characters?|chars?)/i);
+  if (howManyMatch) {
+    return { mode: "stat_specific", unit: normalizeStatUnit(howManyMatch[1]) };
+  }
+  // "count the words", "count the sentences", "count lines"
+  const countTheMatch = text.match(/count\s+(?:the\s+)?(words?|lines?|sentences?|paragraphs?|characters?|chars?)/i);
+  if (countTheMatch) {
+    return { mode: "stat_specific", unit: normalizeStatUnit(countTheMatch[1]) };
+  }
+  // "word count", "line count", "sentence count", "paragraph count", "character count"
+  const xCountMatch = text.match(/\b(word|line|sentence|paragraph|character)\s+count\b/i);
+  if (xCountMatch) {
+    return { mode: "stat_specific", unit: xCountMatch[1].toLowerCase() };
+  }
+  // "number of words", "number of lines"
+  const numberOfMatch = text.match(/\bnumber\s+of\s+(words?|lines?|sentences?|paragraphs?|characters?|chars?)/i);
+  if (numberOfMatch) {
+    return { mode: "stat_specific", unit: normalizeStatUnit(numberOfMatch[1]) };
+  }
+  // "total words", "total lines"
+  const totalMatch = text.match(/\btotal\s+(words?|lines?|sentences?|paragraphs?|characters?|chars?)/i);
+  if (totalMatch) {
+    return { mode: "stat_specific", unit: normalizeStatUnit(totalMatch[1]) };
+  }
+
+  // --- Priority 1b: Full stats overview ---
+  // "stats", "statistics", "overview", "how long is it", "length of the document"
+  if (/\bstatistics?\b|\bstats\b/i.test(text) ||
+      /\boverview\b/i.test(text) ||
       /how\s+long\s+is/i.test(text) ||
       /\blength\b.*\b(?:document|doc|file|paper|it)\b/i.test(text)) {
     return { mode: "stats" };
@@ -230,7 +263,6 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
   }
 
   // --- Priority 17: Last/final/ending single unit, penultimate, next-to-last ---
-  // Check penultimate / next-to-last BEFORE "last single" to avoid "last sentence" matching first
   const penultimateMatch = text.match(/\bpenultimate\s+(line|sentence|paragraph|word)\b/i);
   if (penultimateMatch) {
     return { mode: "last_n", count: 2, unit: penultimateMatch[1].toLowerCase() };
@@ -313,11 +345,12 @@ export const GetQuoteAction: Action = {
     "Triggers include: quote, read, print, show, retrieve, give me, tell me about the document, " +
     "'what does it say about X', 'find X', 'is X mentioned', 'every mention of X', " +
     "'last two sentences', 'first paragraph', 'the third paragraph', 'paragraph 3', 'sentence five', " +
-    "'how many words', 'word count', 'how long is it', 'count the words', " +
+    "'how many words', 'word count', 'how long is it', 'count the words', 'line count', " +
+    "'how many sentences', 'number of paragraphs', 'character count', 'total lines', " +
     "'lines 5 to 10', 'sentences 3 through 7', 'from line 5 to the end', " +
     "'how does it start', 'how does it end', 'the opening', 'the conclusion', " +
     "'full document', 'read it all', 'the second line', '5th sentence', " +
-    "'penultimate sentence', 'next to last paragraph'. " +
+    "'penultimate sentence', 'next to last paragraph', 'stats', 'overview'. " +
     "Do NOT attempt to recall document content from conversation context — only this action retrieves it. " +
     "This is the ONLY way to access stored document content. REPLY cannot access documents.",
   similes: [
@@ -327,7 +360,8 @@ export const GetQuoteAction: Action = {
     "GET_SENTENCES", "FIND_IN_DOCUMENT", "SEARCH_DOCUMENT", "DOCUMENT_LENGTH",
     "READ_PARAGRAPH", "NTH_SENTENCE", "NTH_PARAGRAPH", "LINE_RANGE",
     "SENTENCE_RANGE", "PARAGRAPH_RANGE", "DOCUMENT_OPENING", "DOCUMENT_ENDING",
-    "COUNT_WORDS", "SHOW_STATS", "FIND_MENTION",
+    "COUNT_WORDS", "SHOW_STATS", "FIND_MENTION", "LINE_COUNT", "SENTENCE_COUNT",
+    "PARAGRAPH_COUNT", "CHARACTER_COUNT",
   ],
   examples: [
     // 1. Last line
@@ -350,65 +384,85 @@ export const GetQuoteAction: Action = {
       { name: "{{name1}}", content: { text: "Give me the last two sentences" } },
       { name: "{{name2}}", content: { text: 'Last 2 sentences:\n1. "The framework achieves state-of-the-art results." (line 40)\n2. "Future work will explore scalability." (line 41)', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 5. Stats
+    // 5. Specific stat: word count
     [
       { name: "{{name1}}", content: { text: "How many words are in the document?" } },
-      { name: "{{name2}}", content: { text: "Document stats: 1,247 words, 52 sentences, 8 paragraphs, 73 lines.", actions: ["GET_EXACT_QUOTE"] } },
+      { name: "{{name2}}", content: { text: "The document contains 1,247 words.", actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 6. Paragraph by number
+    // 6. Specific stat: sentence count
+    [
+      { name: "{{name1}}", content: { text: "How many sentences does it have?" } },
+      { name: "{{name2}}", content: { text: "The document contains 52 sentences.", actions: ["GET_EXACT_QUOTE"] } },
+    ],
+    // 7. Specific stat: line count
+    [
+      { name: "{{name1}}", content: { text: "Count the lines" } },
+      { name: "{{name2}}", content: { text: "The document contains 73 lines (68 non-blank).", actions: ["GET_EXACT_QUOTE"] } },
+    ],
+    // 8. Full stats overview
+    [
+      { name: "{{name1}}", content: { text: "Give me the stats" } },
+      { name: "{{name2}}", content: { text: "Document stats: 1,247 words, 52 sentences, 8 paragraphs, 73 lines, 7,420 characters.", actions: ["GET_EXACT_QUOTE"] } },
+    ],
+    // 9. Paragraph by number
     [
       { name: "{{name1}}", content: { text: "Show me paragraph 3" } },
       { name: "{{name2}}", content: { text: 'Paragraph 3 (lines 12-18, 4 sentences):\n"We employed a mixed-methods approach..."', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 7. Full document
+    // 10. Full document
     [
       { name: "{{name1}}", content: { text: "Read me what it says verbatim" } },
       { name: "{{name2}}", content: { text: 'Full document (2341 chars):\n\nAbstract: This paper introduces...', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 8. Line range
+    // 11. Line range
     [
       { name: "{{name1}}", content: { text: "Give me lines 5 through 10" } },
       { name: "{{name2}}", content: { text: 'Lines 5-10:\n5: "The methodology section..."\n6: "We collected data from..."', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 9. Ordinal paragraph
+    // 12. Ordinal paragraph
     [
       { name: "{{name1}}", content: { text: "Read me the third paragraph" } },
       { name: "{{name2}}", content: { text: 'Paragraph 3 (lines 15-21, 87 words):\n"The experimental results demonstrate..."', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 10. How does it end
+    // 13. How does it end
     [
       { name: "{{name1}}", content: { text: "How does the document end?" } },
       { name: "{{name2}}", content: { text: 'Last 3 sentences:\n1. "These findings have broad implications." (line 68)\n2. "Further research is warranted." (line 69)\n3. "We release our code publicly." (line 70)', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 11. How does it start
+    // 14. How does it start
     [
       { name: "{{name1}}", content: { text: "How does it start?" } },
       { name: "{{name2}}", content: { text: 'First 3 sentences:\n1. "Abstract: We present a novel framework." (line 1)\n2. "Recent advances in AI have enabled..." (line 1)\n3. "Our approach differs fundamentally." (line 2)', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 12. First N paragraphs
+    // 15. First N paragraphs
     [
       { name: "{{name1}}", content: { text: "Show me the first two paragraphs" } },
       { name: "{{name2}}", content: { text: 'First 2 paragraphs:\n\nParagraph 1 (lines 1-5, 62 words):\n"Abstract: We present..."\n\nParagraph 2 (lines 7-12, 88 words):\n"Introduction: The field of..."', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 13. Find / search
+    // 16. Find / search
     [
       { name: "{{name1}}", content: { text: "Find the part about methodology" } },
       { name: "{{name2}}", content: { text: 'Found at line 24: "...Our methodology combines reinforcement learning with symbolic reasoning..."', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 14. Is X mentioned
+    // 17. Is X mentioned
     [
       { name: "{{name1}}", content: { text: "Does it mention transformers?" } },
       { name: "{{name2}}", content: { text: 'Found at line 8: "...transformer architectures have shown remarkable scaling..."', actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 15. How long / length
+    // 18. How long / length (full stats)
     [
       { name: "{{name1}}", content: { text: "How long is this document?" } },
       { name: "{{name2}}", content: { text: "Document stats: 2,450 words, 98 sentences, 14 paragraphs, 127 lines, 14,200 characters.", actions: ["GET_EXACT_QUOTE"] } },
     ],
-    // 16. Every mention / multi-match
+    // 19. Every mention / multi-match
     [
       { name: "{{name1}}", content: { text: "Find every mention of 'data'" } },
       { name: "{{name2}}", content: { text: 'Found 5 mentions of "data":\n1. Line 3: "...collected data from..."\n2. Line 12: "...data processing pipeline..."\n3. Line 28: "...data quality metrics..."', actions: ["GET_EXACT_QUOTE"] } },
+    ],
+    // 20. Number of paragraphs (specific stat)
+    [
+      { name: "{{name1}}", content: { text: "How many paragraphs are there?" } },
+      { name: "{{name2}}", content: { text: "The document contains 8 paragraphs.", actions: ["GET_EXACT_QUOTE"] } },
     ],
   ],
 
@@ -420,7 +474,7 @@ export const GetQuoteAction: Action = {
       lineNumber: { type: "number", description: "Line number to retrieve" },
       mode: {
         type: "string",
-        enum: ["search", "search_all", "line", "full", "last", "stats", "last_n", "first_n", "nth", "paragraph", "first_paragraph", "last_paragraph", "range", "sentence_range", "paragraph_range", "implicit_start", "implicit_end"],
+        enum: ["search", "search_all", "line", "full", "last", "stats", "stat_specific", "last_n", "first_n", "nth", "paragraph", "first_paragraph", "last_paragraph", "range", "sentence_range", "paragraph_range", "implicit_start", "implicit_end"],
         description: "Retrieval mode",
       },
     },
@@ -429,7 +483,7 @@ export const GetQuoteAction: Action = {
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
     const text = ((message.content as Content)?.text || "").toLowerCase();
-    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+(?:words?|sentences?|paragraphs?|lines?))|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full|paragraph)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document|last|first)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper)|how\s+many\s+(?:words?|lines?|sentences?|paragraphs?)|word\s+count|statistics?|stats|paragraph\s+\d+|lines?\s+\d+\s+(?:to|through|thru)|(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|\d+(?:st|nd|rd|th))\s+(?:sentence|paragraph|line|word)|(?:sentence|paragraph|line)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|how\s+long\s+is|count\s+the\s+(?:words?|lines?|sentences?)|length|(?:find|locate|search|look\s+for)|(?:is|does)\s+(?:it\s+)?(?:mention|discuss|reference|include)|(?:does\s+it\s+)?talk\s+about|every\s+(?:mention|occurrence|instance)\s+of|how\s+does\s+it\s+(?:start|begin|end)|(?:the\s+)?(?:opening|beginning|ending|conclusion)\s+of|penultimate|next\s+to\s+last|(?:go|skip)\s+to\s+(?:line|paragraph)|read\s+it|tell\s+me\s+about\s+(?:the\s+)?(?:document|doc)|sentences?\s+\d+\s+(?:to|through|thru)|paragraphs?\s+\d+\s+(?:to|through|thru)|from\s+line|everything\s+after|para\s+\d+)/i.test(text);
+    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+(?:words?|sentences?|paragraphs?|lines?))|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full|paragraph)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document|last|first)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper)|how\s+many\s+(?:words?|lines?|sentences?|paragraphs?|characters?|chars?)|word\s+count|line\s+count|sentence\s+count|paragraph\s+count|character\s+count|statistics?|stats|paragraph\s+\d+|lines?\s+\d+\s+(?:to|through|thru)|(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|\d+(?:st|nd|rd|th))\s+(?:sentence|paragraph|line|word)|(?:sentence|paragraph|line)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|how\s+long\s+is|count\s+the\s+(?:words?|lines?|sentences?|paragraphs?|characters?)|length|number\s+of\s+(?:words?|lines?|sentences?|paragraphs?)|total\s+(?:words?|lines?|sentences?|paragraphs?)|(?:find|locate|search|look\s+for)|(?:is|does)\s+(?:it\s+)?(?:mention|discuss|reference|include)|(?:does\s+it\s+)?talk\s+about|every\s+(?:mention|occurrence|instance)\s+of|how\s+does\s+it\s+(?:start|begin|end)|(?:the\s+)?(?:opening|beginning|ending|conclusion)\s+of|penultimate|next\s+to\s+last|(?:go|skip)\s+to\s+(?:line|paragraph)|read\s+it|tell\s+me\s+about\s+(?:the\s+)?(?:document|doc)|sentences?\s+\d+\s+(?:to|through|thru)|paragraphs?\s+\d+\s+(?:to|through|thru)|from\s+line|everything\s+after|para\s+\d+)/i.test(text);
   },
 
   async handler(
@@ -476,7 +530,50 @@ export const GetQuoteAction: Action = {
         { error: "no_url" });
     }
 
-    // --- STATS mode ---
+    // --- STAT_SPECIFIC mode: return just the one stat requested ---
+    if (inferred.mode === "stat_specific") {
+      const data = await getOrComputeProfile(runtime, url);
+      if (!data) {
+        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
+      }
+      const p = data.profile;
+      const unit = inferred.unit ?? "word";
+      const filename = url.split("/").pop() || url;
+
+      if (unit === "word") {
+        return respond(callback, true,
+          `The document contains ${p.wordCount.toLocaleString()} words.`,
+          { url, wordCount: p.wordCount });
+      }
+      if (unit === "line") {
+        return respond(callback, true,
+          `The document contains ${p.lineCount.toLocaleString()} lines (${p.nonBlankLineCount} non-blank).`,
+          { url, lineCount: p.lineCount, nonBlankLineCount: p.nonBlankLineCount });
+      }
+      if (unit === "sentence") {
+        return respond(callback, true,
+          `The document contains ${p.sentenceCount.toLocaleString()} sentences.`,
+          { url, sentenceCount: p.sentenceCount });
+      }
+      if (unit === "paragraph") {
+        return respond(callback, true,
+          `The document contains ${p.paragraphCount.toLocaleString()} paragraphs.`,
+          { url, paragraphCount: p.paragraphCount });
+      }
+      if (unit === "character") {
+        return respond(callback, true,
+          `The document contains ${p.charCount.toLocaleString()} characters.`,
+          { url, charCount: p.charCount });
+      }
+      // Fallback for unknown unit — give full stats
+      const text = `Document stats for ${filename}: ${p.wordCount.toLocaleString()} words, ${p.sentenceCount.toLocaleString()} sentences, ${p.paragraphCount.toLocaleString()} paragraphs, ${p.lineCount.toLocaleString()} lines, ${p.charCount.toLocaleString()} characters.`;
+      return respond(callback, true, text, {
+        url, wordCount: p.wordCount, sentenceCount: p.sentenceCount,
+        paragraphCount: p.paragraphCount, lineCount: p.lineCount, charCount: p.charCount,
+      });
+    }
+
+    // --- STATS mode: full overview ---
     if (inferred.mode === "stats") {
       const data = await getOrComputeProfile(runtime, url);
       if (!data) {
@@ -575,7 +672,7 @@ export const GetQuoteAction: Action = {
       if (!data) {
         return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
       }
-      const paraNum = (inferred.count ?? 1) - 1; // Convert 1-based to 0-based
+      const paraNum = (inferred.count ?? 1) - 1;
       const para = data.profile.paragraphs[paraNum];
       if (!para) {
         return respond(callback, false,
@@ -626,15 +723,11 @@ export const GetQuoteAction: Action = {
         return respond(callback, true, text, { url, sentenceNumber: n, lineNumber: sentence.lineNumber });
       }
       if (unit === "paragraph") {
-        // Delegate to paragraph mode
         inferred.mode = "paragraph";
         inferred.count = n;
-        // Fall through to paragraph handler below
       } else if (unit === "line") {
-        // Delegate to line mode
         inferred.mode = "line";
         inferred.lineNumber = n;
-        // Fall through to line handler below
       } else if (unit === "word") {
         const allWords = data.content.trim().split(/\s+/);
         const word = allWords[n - 1];
@@ -715,11 +808,11 @@ export const GetQuoteAction: Action = {
       if (!data) {
         return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
       }
-      const start = (inferred.lineNumber ?? 1) - 1; // 0-based
+      const start = (inferred.lineNumber ?? 1) - 1;
       const actualEnd = Math.min(
         (inferred.lineEnd ?? start + 1) - 1,
         data.profile.lineCount - 1
-      ); // Clamp to actual doc size
+      );
       const lines = data.profile.lines.slice(start, actualEnd + 1);
       if (lines.length === 0) {
         return respond(callback, false,

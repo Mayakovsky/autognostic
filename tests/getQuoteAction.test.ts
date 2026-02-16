@@ -51,115 +51,72 @@ describe("GetQuoteAction", () => {
     const runtime = createMockRuntime();
 
     it("should match 'repeat the last line'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("repeat the last line")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("repeat the last line"));
       expect(result).toBe(true);
     });
 
     it("should match 'read me line 5'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("read me line 5")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("read me line 5"));
       expect(result).toBe(true);
     });
 
     it("should match 'what does it say'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("what does it say")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("what does it say"));
       expect(result).toBe(true);
     });
 
     it("should match 'quote from the document'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("quote from the document")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("quote from the document"));
       expect(result).toBe(true);
     });
 
     it("should match 'copy the text from'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("copy the text from the file")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("copy the text from the file"));
       expect(result).toBe(true);
     });
 
     it("should match 'first line'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("show me the first line")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("show me the first line"));
       expect(result).toBe(true);
     });
 
     it("should match 'word for word'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("give it to me word for word")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("give it to me word for word"));
       expect(result).toBe(true);
     });
 
     it("should NOT match 'send a message to Bob'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("send a message to Bob")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("send a message to Bob"));
       expect(result).toBe(false);
     });
 
     it("should NOT match 'hello how are you'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("hello how are you")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("hello how are you"));
       expect(result).toBe(false);
     });
 
     it("should NOT match 'add this URL to knowledge'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("add this URL to knowledge https://example.com")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("add this URL to knowledge https://example.com"));
       expect(result).toBe(false);
     });
 
-    // New validate tests for profile-aware modes
     it("should match 'how many words'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("how many words are in the document")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("how many words are in the document"));
       expect(result).toBe(true);
     });
 
     it("should match 'last two sentences'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("give me the last two sentences")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("give me the last two sentences"));
       expect(result).toBe(true);
     });
 
     it("should match 'paragraph 3'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("show me paragraph 3")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("show me paragraph 3"));
       expect(result).toBe(true);
     });
 
     it("should match 'lines 5 through 10'", async () => {
-      const result = await GetQuoteAction.validate!(
-        runtime as any,
-        createMessage("read lines 5 through 10")
-      );
+      const result = await GetQuoteAction.validate!(runtime as any, createMessage("read lines 5 through 10"));
       expect(result).toBe(true);
     });
   });
@@ -180,18 +137,8 @@ describe("GetQuoteAction", () => {
       });
 
       const runtime = createMockRuntime();
-      const message = createMessage(
-        "repeat the last line from https://example.com/doc.txt",
-        { url: "https://example.com/doc.txt" }
-      );
-
-      const result = await GetQuoteAction.handler(
-        runtime as any,
-        message,
-        undefined,
-        undefined,
-        mockCallback
-      );
+      const message = createMessage("repeat the last line from https://example.com/doc.txt", { url: "https://example.com/doc.txt" });
+      const result = await GetQuoteAction.handler(runtime as any, message, undefined, undefined, mockCallback);
 
       expect(mockCallback).toHaveBeenCalled();
       const callText = mockCallback.mock.calls[0][0].text;
@@ -207,18 +154,8 @@ describe("GetQuoteAction", () => {
       });
 
       const runtime = createMockRuntime();
-      const message = createMessage(
-        "read me the first line from https://example.com/doc.txt",
-        { url: "https://example.com/doc.txt" }
-      );
-
-      const result = await GetQuoteAction.handler(
-        runtime as any,
-        message,
-        undefined,
-        undefined,
-        mockCallback
-      );
+      const message = createMessage("read me the first line from https://example.com/doc.txt", { url: "https://example.com/doc.txt" });
+      const result = await GetQuoteAction.handler(runtime as any, message, undefined, undefined, mockCallback);
 
       expect(mockCallback).toHaveBeenCalled();
       const callText = mockCallback.mock.calls[0][0].text;
@@ -234,17 +171,8 @@ describe("GetQuoteAction", () => {
       });
 
       const runtime = createMockRuntime();
-      const message = createMessage(
-        "repeat the last line from https://example.com/test.md"
-      );
-
-      const result = await GetQuoteAction.handler(
-        runtime as any,
-        message,
-        undefined,
-        undefined,
-        mockCallback
-      );
+      const message = createMessage("repeat the last line from https://example.com/test.md");
+      const result = await GetQuoteAction.handler(runtime as any, message, undefined, undefined, mockCallback);
 
       expect(mockCallback).toHaveBeenCalled();
       expect((result as any).success).toBe(true);
@@ -253,14 +181,7 @@ describe("GetQuoteAction", () => {
     it("should return error when no URL found anywhere", async () => {
       const runtime = createMockRuntime();
       const message = createMessage("repeat the last line");
-
-      const result = await GetQuoteAction.handler(
-        runtime as any,
-        message,
-        undefined,
-        undefined,
-        mockCallback
-      );
+      const result = await GetQuoteAction.handler(runtime as any, message, undefined, undefined, mockCallback);
 
       expect(mockCallback).toHaveBeenCalled();
       const callText = mockCallback.mock.calls[0][0].text;
@@ -268,7 +189,7 @@ describe("GetQuoteAction", () => {
       expect((result as any).success).toBe(false);
     });
 
-    it("should return stats when asked 'how many words'", async () => {
+    it("should return only word count when asked 'how many words' (stat_specific)", async () => {
       const { autognosticDocumentsRepository } = await import("../src/db/autognosticDocumentsRepository");
       (autognosticDocumentsRepository.getWithProfile as any).mockResolvedValue({
         content: "Hello world. Goodbye.",
@@ -283,23 +204,15 @@ describe("GetQuoteAction", () => {
       });
 
       const runtime = createMockRuntime();
-      const message = createMessage(
-        "how many words are in https://example.com/doc.txt",
-        { url: "https://example.com/doc.txt" }
-      );
-
-      const result = await GetQuoteAction.handler(
-        runtime as any,
-        message,
-        undefined,
-        undefined,
-        mockCallback
-      );
+      const message = createMessage("how many words are in https://example.com/doc.txt", { url: "https://example.com/doc.txt" });
+      const result = await GetQuoteAction.handler(runtime as any, message, undefined, undefined, mockCallback);
 
       expect(mockCallback).toHaveBeenCalled();
       const callText = mockCallback.mock.calls[0][0].text;
       expect(callText).toContain("3 words");
-      expect(callText).toContain("2 sentences");
+      // stat_specific returns ONLY the requested stat, not the full dump
+      expect(callText).not.toContain("sentences");
+      expect(callText).not.toContain("paragraphs");
       expect((result as any).success).toBe(true);
     });
 
@@ -323,18 +236,8 @@ describe("GetQuoteAction", () => {
       });
 
       const runtime = createMockRuntime();
-      const message = createMessage(
-        "give me the last two sentences from https://example.com/doc.txt",
-        { url: "https://example.com/doc.txt" }
-      );
-
-      const result = await GetQuoteAction.handler(
-        runtime as any,
-        message,
-        undefined,
-        undefined,
-        mockCallback
-      );
+      const message = createMessage("give me the last two sentences from https://example.com/doc.txt", { url: "https://example.com/doc.txt" });
+      const result = await GetQuoteAction.handler(runtime as any, message, undefined, undefined, mockCallback);
 
       expect(mockCallback).toHaveBeenCalled();
       const callText = mockCallback.mock.calls[0][0].text;
