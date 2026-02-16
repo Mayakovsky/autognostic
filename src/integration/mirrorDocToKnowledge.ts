@@ -5,6 +5,8 @@ import { randomUUID, createHash } from "crypto";
 import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
 import { withRetry } from "../utils/retry";
 import { analyzeDocument } from "../services/DocumentAnalyzer";
+import { WebPageProcessor } from "../services/WebPageProcessor";
+import { PdfExtractor } from "../services/PdfExtractor";
 
 /**
  * Convert URLs to their raw content equivalents.
@@ -93,13 +95,50 @@ export async function mirrorDocToKnowledge(
     content = result.content;
     contentType = params.contentType || result.contentType;
 
-    // Warn if we got HTML when expecting text (but not for .html files)
+    // HTML received when expecting text — extract clean text or follow PDF link
     if (result.isHtml && !rawUrl.toLowerCase().endsWith(".html") && !rawUrl.toLowerCase().endsWith(".htm")) {
       console.warn(
         `[autognostic] WARNING: Received HTML content from ${rawUrl} - ` +
         `the URL may be a webpage wrapper instead of raw content. ` +
         `Original URL: ${params.url}`
       );
+      try {
+        const processor = new WebPageProcessor();
+        const extracted = processor.extractFromHtml(result.content, rawUrl);
+        const pdfLink = processor.findBestPdfLink(extracted);
+        if (pdfLink) {
+          // Try to download and extract PDF
+          try {
+            const pdfRes = await http.get(pdfLink.href);
+            if (pdfRes.ok) {
+              const extractor = new PdfExtractor();
+              const pdfResult = await extractor.extract(
+                Buffer.from(await pdfRes.arrayBuffer())
+              );
+              content = pdfResult.text;
+              contentType = "text/plain";
+              console.debug(
+                `[autognostic] Extracted ${pdfResult.pageCount} pages from PDF: ${pdfLink.href}`
+              );
+            } else {
+              // PDF fetch failed — fall back to extracted HTML text
+              content = extracted.text;
+              contentType = "text/plain";
+            }
+          } catch (pdfErr) {
+            console.debug(`[autognostic] PDF extraction failed, using HTML text:`, pdfErr);
+            content = extracted.text;
+            contentType = "text/plain";
+          }
+        } else {
+          // No PDF link — use extracted clean text
+          content = extracted.text;
+          contentType = "text/plain";
+        }
+      } catch (htmlErr) {
+        console.debug(`[autognostic] HTML processing failed, using raw content:`, htmlErr);
+        // Fall through with original content
+      }
     }
   } else {
     // For binary or unknown content types, fetch normally
@@ -115,6 +154,49 @@ export async function mirrorDocToKnowledge(
       content = buf.toString("base64");
     } else {
       content = await res.text();
+    }
+
+    // HTML received from extensionless URL (academic publishers, etc.) — extract clean text or follow PDF link
+    const isHtmlResponse = contentType.includes("text/html") ||
+      content.trimStart().toLowerCase().startsWith("<!doctype") ||
+      content.trimStart().toLowerCase().startsWith("<html");
+    if (isHtmlResponse) {
+      console.warn(
+        `[autognostic] HTML response from extensionless URL ${rawUrl} — applying WebPageProcessor pipeline`
+      );
+      try {
+        const processor = new WebPageProcessor();
+        const extracted = processor.extractFromHtml(content, rawUrl);
+        const pdfLink = processor.findBestPdfLink(extracted);
+        if (pdfLink) {
+          try {
+            const pdfRes = await http.get(pdfLink.href);
+            if (pdfRes.ok) {
+              const extractor = new PdfExtractor();
+              const pdfResult = await extractor.extract(
+                Buffer.from(await pdfRes.arrayBuffer())
+              );
+              content = pdfResult.text;
+              contentType = "text/plain";
+              console.debug(
+                `[autognostic] Extracted ${pdfResult.pageCount} pages from PDF: ${pdfLink.href}`
+              );
+            } else {
+              content = extracted.text;
+              contentType = "text/plain";
+            }
+          } catch (pdfErr) {
+            console.debug(`[autognostic] PDF extraction failed, using HTML text:`, pdfErr);
+            content = extracted.text;
+            contentType = "text/plain";
+          }
+        } else {
+          content = extracted.text;
+          contentType = "text/plain";
+        }
+      } catch (htmlErr) {
+        console.debug(`[autognostic] HTML processing failed, using raw content:`, htmlErr);
+      }
     }
   }
 

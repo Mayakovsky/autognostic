@@ -1,54 +1,78 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-15 21:21 (local)
-> Updated by: claude-code (opus 4.6)
-> Session label: anthropic model fix + agent diagnostics
-> Staleness gate: 2026-02-15 — if today is >3 days past this,
+> Last updated: 2026-02-16 17:42 (local)
+> Updated by: claude-code (opus 4.6) — heartbeat sync
+> Session label: Phase 2 — grammar, web/PDF, sections, inferMode hardening
+> Staleness gate: 2026-02-16 — if today is >3 days past this,
 >   verify state before acting (see Section 3 of SeshMem schema).
 
 ## Focus (1-3 goals, testable)
-- [ ] Verify DocumentAnalyzer integration end-to-end (stats, last-N-sentences, paragraph retrieval)
-- [ ] Confirm GET_EXACT_QUOTE mode detection handles all natural language patterns
-- [ ] Validate embedding pipeline produces searchable knowledge fragments
+- [x] Phase 2 WS1-WS4: GrammarEngine, WebPageProcessor, PdfExtractor, ScientificSectionDetector, inferMode hardening
+- [ ] Test Phase 2 features in live agent: section retrieval, compound requests, HTML→PDF pipeline
+- [ ] Validate arXiv abstract URL → PDF extraction end-to-end
 
 ## What Works (verified)
-- ✅ Build (`bun run build`) — 0 errors — verified 2026-02-13 (commit 81dd659)
-- ✅ Tests (`npx vitest run`) — 147/147 pass across 10 test files — verified 2026-02-13
+- ✅ Build (`bun run build`) — 0 errors — verified 2026-02-16
+- ✅ Tests (`npx vitest run`) — 272/272 pass across 15 test files — verified 2026-02-16
+- ✅ GrammarEngine: phrase/clause detection on-demand from sentences — verified 2026-02-16
+- ✅ WebPageProcessor: HTML→text extraction via linkedom, PDF link discovery — verified 2026-02-16
+- ✅ PdfExtractor: PDF→text via unpdf@0.11.0 (Bun-safe) — verified 2026-02-16
+- ✅ ScientificSectionDetector: section detection (markdown, numbered, ALL CAPS, inferred abstract) — verified 2026-02-16
+- ✅ Section routing: "the conclusion" → section(conclusion), "show me the abstract" → section(abstract) — verified 2026-02-16
+- ✅ Compound requests: "first and third sentences" → combined response — verified 2026-02-16
+- ✅ Keyword counting: "how many times does X appear" → search_all with countOnly — verified 2026-02-16
+- ✅ Nth mode fix: every branch returns immediately, no fallthrough to full-doc — verified 2026-02-16
+- ✅ HTML→PDF pipeline in mirrorDocToKnowledge.ts (addUrlToKnowledgeAction untouched) — verified 2026-02-16
 - ✅ Direct Ollama embedding (768 dims via REST API bypass) — verified 2026-02-12
 - ✅ Real agent (autognostic-agent/) loads plugin via `file:` dependency — verified 2026-02-12
 - ✅ Atlas character routes ADD_URL_TO_KNOWLEDGE correctly — verified 2026-02-12
 - ✅ GET_EXACT_QUOTE fires and returns document content — verified 2026-02-12
 - ✅ DocumentAnalyzer service: sentence/paragraph/line profiling — verified 2026-02-13
 - ✅ Profile stored at ingest via mirrorDocToKnowledge — verified 2026-02-13
-- ✅ Provider inventory shows word/sentence/paragraph counts — verified 2026-02-13
-- ✅ Post-commit git hook auto-updates heartbeat — verified 2026-02-13
+- ✅ Provider inventory shows word/sentence/paragraph counts + section capabilities — verified 2026-02-16
 
 ## What's Broken
-- ❌ GET_EXACT_QUOTE mode detection falls to full-fallback for "last two sentences"
-  - Symptom: `"mode": "full-fallback"` in response
-  - Suspected cause: Regex doesn't match `last N sentences` pattern (only `last sentence`)
-  - Fix: DocumentAnalyzer handler rewrite should resolve (Phase 4 of DOCUMENT-ANALYZER-PLAN.md)
+- ✅ ~~GET_EXACT_QUOTE mode detection falls to full-fallback for "last two sentences"~~ — FIXED Phase 1.5
 - ✅ ~~Anthropic model errors~~ — FIXED 2026-02-14
-  - Root cause 1: `character.settings.secrets` was `{}` — runtime.getSetting() never checked process.env
-  - Root cause 2: All Claude 3.5 model names retired by Anthropic API (`not_found_error`)
-  - Fix: Populated secrets from process.env in character.ts + updated .env models:
-    - Small: `claude-haiku-4-5-20251001` (was `claude-3-5-haiku-latest`)
-    - Large: `claude-sonnet-4-20250514` (was `claude-3-5-sonnet-latest`)
+
+## Phase 2 Implementation Summary
+### New Files (6)
+- `src/services/GrammarEngine.ts` — phrase/clause detection (on-demand, no DB)
+- `src/services/WebPageProcessor.ts` — HTML→text via linkedom + PDF link discovery
+- `src/services/PdfExtractor.ts` — PDF→text via unpdf@0.11.0
+- `src/services/ScientificSectionDetector.ts` — section detection (lazy, no DB)
+- `tests/GrammarEngine.test.ts` — 16 tests
+- `tests/ScientificSectionDetector.test.ts` — 13 tests
+- `tests/WebPageProcessor.test.ts` — 10 tests
+- `tests/PdfExtractor.test.ts` — 2 tests
+
+### Modified Files
+- `src/actions/getQuoteAction.ts` — section/compound/countOnly handlers, nth fix, P5.5 routing, mode enum
+- `src/integration/mirrorDocToKnowledge.ts` — HTML→PDF pipeline (action handler untouched)
+- `src/providers/fullDocumentProvider.ts` — updated instructions with section capabilities
+- `tests/inferMode.test.ts` — 84 tests (was ~50), conclusion→section fix
+
+### Design Rules Enforced
+- GrammarEngine computes on-demand, nothing stored in DB
+- Section detection computed lazily in handler, never stored
+- No new count_occurrences mode — reuses search_all with countOnly flag
+- Compound requests return ONE ActionResult
+- addUrlToKnowledgeAction.ts — zero modifications
+- Database schema — zero new columns
 
 ## Next Actions (ordered)
-1. Test DocumentAnalyzer in live agent: stats, last-N, paragraph modes → `elizaos dev` from autognostic-agent/
-2. Fix remaining mode detection gaps in getQuoteAction handler → `src/actions/getQuoteAction.ts`
+1. Test Phase 2 in live agent: section retrieval, compound queries → `elizaos dev` from autognostic-agent/
+2. Test arXiv URL → HTML→PDF pipeline in live agent
 3. Verify embeddings stored in ElizaOS memories table → `scripts/check-memories.ts`
-4. Test scientific paper classification end-to-end → add arXiv URL via chat
-5. Update docs/schema.md with profile column addition → `docs/schema.md`
+4. Update docs/schema.md with Phase 2 additions → `docs/schema.md`
 
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-16 | Mayakovsky | feat: Phase 2 — grammar engine, HTML/PDF pipeline, section | 5d433f6 |
+| 2026-02-16 | Mayakovsky | feat: Phase 2 — grammar, web/PDF, sections, inferMode hardening — 272/272 | pending commit |
 | 2026-02-15 | Mayakovsky | feat: split stats into stat_specific and stats modes — 214 | ae2a4e8 |
 | 2026-02-15 | Mayakovsky | feat: complete natural language retrieval — ordinals, sear | f12386b |
 | 2026-02-14 | Mayakovsky | docs: update heartbeat — Anthropic model errors fixed | f19cc56 |
-| 2026-02-14 | claude-code | Fix Anthropic model errors: secrets + retired model names | autognostic-agent changes (no git) |
-| 2026-02-13 | Mayakovsky | docs: update heartbeat, add document analyzer plan and imple | 35fdadb |
 
 ## Guardrails (DO / DON'T)
 DO:
@@ -92,6 +116,7 @@ Remove-Item -Recurse -Force .\.eliza
 
 ## Links
 - [CLAUDE.md](./CLAUDE.md) — Agent identity + permissions
+- [PHASE2-IMPLEMENTATION-PLAN-v2.md](./PHASE2-IMPLEMENTATION-PLAN-v2.md) — Phase 2 spec
 - [DOCUMENT-ANALYZER-PLAN.md](./DOCUMENT-ANALYZER-PLAN.md) — Analyzer implementation spec
 - [Architecture](./docs/architecture.md)
 - [Schema](./docs/schema.md)

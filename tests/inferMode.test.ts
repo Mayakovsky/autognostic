@@ -128,8 +128,10 @@ describe("inferMode — Section 12 test matrix", () => {
   it("last paragraph → last_paragraph", () => {
     expect(inferMode("last paragraph").mode).toBe("last_paragraph");
   });
-  it("the conclusion → last_paragraph", () => {
-    expect(inferMode("the conclusion").mode).toBe("last_paragraph");
+  it("the conclusion → section", () => {
+    const result = inferMode("the conclusion");
+    expect(result.mode).toBe("section");
+    expect(result.sectionName).toBe("conclusion");
   });
 
   // Implicit start/end
@@ -142,8 +144,10 @@ describe("inferMode — Section 12 test matrix", () => {
   it("what's the opening → implicit_start", () => {
     expect(inferMode("what's the opening").mode).toBe("implicit_start");
   });
-  it("what's the conclusion → implicit_end", () => {
-    expect(inferMode("what's the conclusion").mode).toBe("implicit_end");
+  it("what's the conclusion → section", () => {
+    const result = inferMode("what's the conclusion");
+    expect(result.mode).toBe("section");
+    expect(result.sectionName).toBe("conclusion");
   });
 
   // Ranges
@@ -249,5 +253,104 @@ describe("inferMode — Section 12 test matrix", () => {
   });
   it("tell me about the document → stats", () => {
     expect(inferMode("tell me about the document").mode).toBe("stats");
+  });
+
+  // --- Section routing (P5.5) ---
+  it("show me the abstract → section(abstract)", () => {
+    const r = inferMode("show me the abstract");
+    expect(r.mode).toBe("section");
+    expect(r.sectionName).toBe("abstract");
+  });
+  it("read the methods → section(methods)", () => {
+    const r = inferMode("read the methods");
+    expect(r.mode).toBe("section");
+    expect(r.sectionName).toBe("methods");
+  });
+  it("what's in the introduction → section(introduction)", () => {
+    const r = inferMode("what's in the introduction");
+    expect(r.mode).toBe("section");
+    expect(r.sectionName).toBe("introduction");
+  });
+  it("the discussion → section(discussion)", () => {
+    const r = inferMode("the discussion");
+    expect(r.mode).toBe("section");
+    expect(r.sectionName).toBe("discussion");
+  });
+  it("show me the results section → section(results)", () => {
+    const r = inferMode("show me the results section");
+    expect(r.mode).toBe("section");
+    expect(r.sectionName).toBe("results");
+  });
+  it("the references → section(references)", () => {
+    const r = inferMode("the references");
+    expect(r.mode).toBe("section");
+    expect(r.sectionName).toBe("references");
+  });
+
+  // --- Section list ---
+  it("list the sections → section_list", () => {
+    expect(inferMode("list the sections").mode).toBe("section_list");
+  });
+  it("what sections does it have → section_list", () => {
+    expect(inferMode("what sections does it have").mode).toBe("section_list");
+  });
+
+  // --- Compound requests ---
+  it("first and third sentences → compound", () => {
+    const r = inferMode("first and third sentences");
+    expect(r.mode).toBe("compound");
+    expect(r.parts).toHaveLength(2);
+    expect(r.parts![0].count).toBe(1);
+    expect(r.parts![1].count).toBe(3);
+    expect(r.unit).toBe("sentence");
+  });
+  it("second and fifth paragraphs → compound", () => {
+    const r = inferMode("second and fifth paragraphs");
+    expect(r.mode).toBe("compound");
+    expect(r.parts).toHaveLength(2);
+    expect(r.parts![0].count).toBe(2);
+    expect(r.parts![1].count).toBe(5);
+  });
+
+  // --- Keyword counting (countOnly) ---
+  it("how many times does 'data' appear → search_all countOnly", () => {
+    const r = inferMode("how many times does 'data' appear");
+    expect(r.mode).toBe("search_all");
+    expect(r.countOnly).toBe(true);
+    expect(r.searchText).toBe("data");
+  });
+  it("how many times does the word neural appear → search_all countOnly", () => {
+    const r = inferMode("how many times does the word neural appear");
+    expect(r.mode).toBe("search_all");
+    expect(r.countOnly).toBe(true);
+    expect(r.searchText).toContain("neural");
+  });
+
+  // --- Nth mode: CRITICAL — must never fall through to full-doc dump ---
+  it("third sentence → nth (returns only that sentence)", () => {
+    const r = inferMode("third sentence");
+    expect(r.mode).toBe("nth");
+    expect(r.count).toBe(3);
+    expect(r.unit).toBe("sentence");
+  });
+  it("5th paragraph → nth", () => {
+    const r = inferMode("5th paragraph");
+    expect(r.mode).toBe("nth");
+    expect(r.count).toBe(5);
+    expect(r.unit).toBe("paragraph");
+  });
+  it("second line → nth", () => {
+    const r = inferMode("second line");
+    expect(r.mode).toBe("nth");
+    expect(r.count).toBe(2);
+    expect(r.unit).toBe("line");
+  });
+
+  // --- P7 no longer catches "conclusion" ---
+  it("last paragraph → last_paragraph (not section)", () => {
+    expect(inferMode("last paragraph").mode).toBe("last_paragraph");
+  });
+  it("ending → last_paragraph", () => {
+    expect(inferMode("ending").mode).toBe("last_paragraph");
   });
 });

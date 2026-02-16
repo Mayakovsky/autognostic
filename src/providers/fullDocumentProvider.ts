@@ -89,7 +89,9 @@ ${inventoryLines.join("\n")}
 - To quote, read, search, or retrieve ANY content from these documents: use GET_EXACT_QUOTE.
 - Supported: full document, specific line, line/sentence/paragraph range, last/first N units,
   ordinal access (third paragraph, 5th sentence), search by topic, multi-match search,
-  word count/stats, document length, opening/conclusion.
+  word count/stats, document length, opening/conclusion, section retrieval (abstract,
+  introduction, methods, results, conclusion), section listing, keyword frequency counting,
+  compound requests (first and third sentences).
 - Do NOT attempt to recall or reproduce document content from memory.
 - Do NOT use REPLY to answer questions about document content.
 - If the user asks "what does it say", "read me", "quote", "print", "show contents",

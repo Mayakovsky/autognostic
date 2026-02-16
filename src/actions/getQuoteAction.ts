@@ -4,6 +4,7 @@ import { autognosticDocumentsRepository } from "../db/autognosticDocumentsReposi
 import { analyzeDocument } from "../services/DocumentAnalyzer";
 import type { DocumentProfile } from "../services/DocumentAnalyzer.types";
 import { safeSerialize } from "../utils/safeSerialize";
+import { detectSections, normalizeSectionName } from "../services/ScientificSectionDetector";
 
 /** Helper: get or lazily compute a profile for a URL */
 async function getOrComputeProfile(
@@ -60,6 +61,9 @@ type InferredMode = {
   lineEnd?: number;
   searchText?: string;
   unit?: string;
+  sectionName?: string;
+  countOnly?: boolean;
+  parts?: InferredMode[];
 };
 
 // Number word pattern for regex (cardinals)
@@ -176,6 +180,59 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
     }
   }
 
+  // --- Priority 5.5: Section routing (before last_paragraph at P7) ---
+  const SECTION_KW = /(abstract|introduction|background|methods?|methodology|results?|discussion|conclusions?|references?|bibliography|acknowledg\w*|appendix|supplementary|keywords?|literature)/i;
+  const sectionMatch = text.match(
+    new RegExp(`(?:show\\s+(?:me\\s+)?(?:the\\s+)?|read\\s+(?:the\\s+)?|what(?:'s|\\s+is)\\s+(?:in\\s+)?(?:the\\s+)?|(?:give|get)\\s+(?:me\\s+)?(?:the\\s+)?|the\\s+)(${SECTION_KW.source})(?:\\s+(?:section|part))?`, "i")
+  );
+  if (sectionMatch) {
+    const name = normalizeSectionName(sectionMatch[1]);
+    if (name) return { mode: "section", sectionName: name };
+  }
+
+  // --- Priority 5.6: Section list / section search ---
+  if (/\blist\s+(?:the\s+)?sections\b/i.test(text) ||
+      /\bwhat\s+sections\b/i.test(text) ||
+      /\btable\s+of\s+contents\b/i.test(text)) {
+    return { mode: "section_list" };
+  }
+
+  // --- Priority 5.7: Compound requests — "first and third sentences" ---
+  const compoundMatch = text.match(
+    new RegExp(`\\b(${ORD_WORDS})\\s+and\\s+(${ORD_WORDS})\\s+(${UNIT_SINGULAR})s?\\b`, "i")
+  );
+  if (compoundMatch) {
+    const n1 = parseNumber(compoundMatch[1]);
+    const n2 = parseNumber(compoundMatch[2]);
+    const unit = compoundMatch[3].toLowerCase();
+    return {
+      mode: "compound",
+      unit,
+      parts: [
+        { mode: "nth", count: n1, unit },
+        { mode: "nth", count: n2, unit },
+      ],
+    };
+  }
+
+  // --- Priority 5.8: Keyword counting — "how many times does X appear" ---
+  const freqMatch = text.match(
+    /how\s+many\s+times?\s+(?:does?\s+)?(?:the\s+(?:word|phrase|term)\s+)?['"]?(.+?)['"]?\s+(?:appear|occur|show\s+up|come\s+up|mentioned)/i
+  );
+  if (freqMatch) {
+    return { mode: "search_all", searchText: cleanSearchText(freqMatch[1]), countOnly: true };
+  }
+  const freqMatch2 = text.match(
+    /(?:count|frequency\s+of)\s+(?:the\s+(?:word|phrase|term)\s+)?['"]?(.+?)['"]?\s+(?:in\s+)?(?:the\s+)?(?:document|doc|paper|file|it)?/i
+  );
+  if (freqMatch2) {
+    // Avoid matching "count the words" which is stat_specific
+    const candidate = freqMatch2[1].trim().toLowerCase();
+    if (!["word", "words", "line", "lines", "sentence", "sentences", "paragraph", "paragraphs", "character", "characters"].includes(candidate)) {
+      return { mode: "search_all", searchText: cleanSearchText(freqMatch2[1]), countOnly: true };
+    }
+  }
+
   // --- Priority 14a: "everything after paragraph N" (must come before paragraph N) ---
   const everythingAfterPara = text.match(/\beverything\s+after\s+paragraph\s+(\d+)\b/i);
   if (everythingAfterPara) {
@@ -188,10 +245,10 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
     return { mode: "paragraph", count: parseInt(paraMatch[1], 10) };
   }
 
-  // --- Priority 9: How does it end / what's the ending/conclusion ---
-  // (Moved before P7/P8 so "what's the conclusion" → implicit_end, not last_paragraph)
+  // --- Priority 9: How does it end / what's the ending ---
+  // NOTE: "conclusion" removed — now caught by section routing at P5.5
   if (/how\s+does\s+it\s+end/i.test(text) ||
-      /what(?:'s|\s+is)\s+(?:the\s+)?(?:ending|conclusion)/i.test(text)) {
+      /what(?:'s|\s+is)\s+(?:the\s+)?ending/i.test(text)) {
     return { mode: "implicit_end" };
   }
 
@@ -201,9 +258,10 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
     return { mode: "implicit_start" };
   }
 
-  // --- Priority 7: Last/final/ending paragraph, conclusion ---
+  // --- Priority 7: Last/final/ending paragraph ---
+  // NOTE: "conclusion" removed — now caught by section routing at P5.5
   if (/\b(?:last|final|ending)\s+paragraph\b/i.test(text) ||
-      /\b(?:conclusion|ending|end\s+of)\b/i.test(text)) {
+      /\b(?:ending|end\s+of)\b/i.test(text)) {
     return { mode: "last_paragraph" };
   }
 
@@ -348,7 +406,9 @@ export const GetQuoteAction: Action = {
     "'how many words', 'word count', 'how long is it', 'count the words', 'line count', " +
     "'how many sentences', 'number of paragraphs', 'character count', 'total lines', " +
     "'lines 5 to 10', 'sentences 3 through 7', 'from line 5 to the end', " +
-    "'how does it start', 'how does it end', 'the opening', 'the conclusion', " +
+    "'how does it start', 'how does it end', 'the opening', " +
+    "'show me the abstract', 'the conclusion', 'read the methods', 'list sections', " +
+    "'first and third sentences', 'how many times does X appear', " +
     "'full document', 'read it all', 'the second line', '5th sentence', " +
     "'penultimate sentence', 'next to last paragraph', 'stats', 'overview'. " +
     "Do NOT attempt to recall document content from conversation context — only this action retrieves it. " +
@@ -362,6 +422,9 @@ export const GetQuoteAction: Action = {
     "SENTENCE_RANGE", "PARAGRAPH_RANGE", "DOCUMENT_OPENING", "DOCUMENT_ENDING",
     "COUNT_WORDS", "SHOW_STATS", "FIND_MENTION", "LINE_COUNT", "SENTENCE_COUNT",
     "PARAGRAPH_COUNT", "CHARACTER_COUNT",
+    "GET_SECTION", "LIST_SECTIONS", "SHOW_ABSTRACT", "SHOW_INTRODUCTION",
+    "SHOW_METHODS", "SHOW_RESULTS", "SHOW_CONCLUSION", "COMPOUND_QUERY",
+    "KEYWORD_FREQUENCY",
   ],
   examples: [
     // 1. Last line
@@ -474,8 +537,8 @@ export const GetQuoteAction: Action = {
       lineNumber: { type: "number", description: "Line number to retrieve" },
       mode: {
         type: "string",
-        enum: ["search", "search_all", "line", "full", "last", "stats", "stat_specific", "last_n", "first_n", "nth", "paragraph", "first_paragraph", "last_paragraph", "range", "sentence_range", "paragraph_range", "implicit_start", "implicit_end"],
-        description: "Retrieval mode",
+        enum: ["search", "search_all", "line", "full", "last", "stats", "stat_specific", "last_n", "first_n", "nth", "paragraph", "first_paragraph", "last_paragraph", "range", "sentence_range", "paragraph_range", "implicit_start", "implicit_end", "section", "section_list", "compound"],
+        description: "Retrieval mode — includes section retrieval, section listing, and compound requests",
       },
     },
     required: ["url"],
@@ -483,7 +546,7 @@ export const GetQuoteAction: Action = {
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
     const text = ((message.content as Content)?.text || "").toLowerCase();
-    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+(?:words?|sentences?|paragraphs?|lines?))|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full|paragraph)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document|last|first)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper)|how\s+many\s+(?:words?|lines?|sentences?|paragraphs?|characters?|chars?)|word\s+count|line\s+count|sentence\s+count|paragraph\s+count|character\s+count|statistics?|stats|paragraph\s+\d+|lines?\s+\d+\s+(?:to|through|thru)|(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|\d+(?:st|nd|rd|th))\s+(?:sentence|paragraph|line|word)|(?:sentence|paragraph|line)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|how\s+long\s+is|count\s+the\s+(?:words?|lines?|sentences?|paragraphs?|characters?)|length|number\s+of\s+(?:words?|lines?|sentences?|paragraphs?)|total\s+(?:words?|lines?|sentences?|paragraphs?)|(?:find|locate|search|look\s+for)|(?:is|does)\s+(?:it\s+)?(?:mention|discuss|reference|include)|(?:does\s+it\s+)?talk\s+about|every\s+(?:mention|occurrence|instance)\s+of|how\s+does\s+it\s+(?:start|begin|end)|(?:the\s+)?(?:opening|beginning|ending|conclusion)\s+of|penultimate|next\s+to\s+last|(?:go|skip)\s+to\s+(?:line|paragraph)|read\s+it|tell\s+me\s+about\s+(?:the\s+)?(?:document|doc)|sentences?\s+\d+\s+(?:to|through|thru)|paragraphs?\s+\d+\s+(?:to|through|thru)|from\s+line|everything\s+after|para\s+\d+)/i.test(text);
+    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+(?:words?|sentences?|paragraphs?|lines?))|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full|paragraph)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document|last|first)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper)|how\s+many\s+(?:words?|lines?|sentences?|paragraphs?|characters?|chars?)|word\s+count|line\s+count|sentence\s+count|paragraph\s+count|character\s+count|statistics?|stats|paragraph\s+\d+|lines?\s+\d+\s+(?:to|through|thru)|(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|\d+(?:st|nd|rd|th))\s+(?:sentence|paragraph|line|word)|(?:sentence|paragraph|line)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|how\s+long\s+is|count\s+the\s+(?:words?|lines?|sentences?|paragraphs?|characters?)|length|number\s+of\s+(?:words?|lines?|sentences?|paragraphs?)|total\s+(?:words?|lines?|sentences?|paragraphs?)|(?:find|locate|search|look\s+for)|(?:is|does)\s+(?:it\s+)?(?:mention|discuss|reference|include)|(?:does\s+it\s+)?talk\s+about|every\s+(?:mention|occurrence|instance)\s+of|how\s+does\s+it\s+(?:start|begin|end)|(?:the\s+)?(?:opening|beginning|ending|conclusion)\s+of|(?:the\s+)?(?:abstract|introduction|methods?|results?|discussion|conclusions?|references?|acknowledgments?|bibliography)|list\s+(?:the\s+)?sections|table\s+of\s+contents|how\s+many\s+times|penultimate|next\s+to\s+last|(?:go|skip)\s+to\s+(?:line|paragraph)|read\s+it|tell\s+me\s+about\s+(?:the\s+)?(?:document|doc)|sentences?\s+\d+\s+(?:to|through|thru)|paragraphs?\s+\d+\s+(?:to|through|thru)|from\s+line|everything\s+after|para\s+\d+)/i.test(text);
   },
 
   async handler(
@@ -703,7 +766,7 @@ export const GetQuoteAction: Action = {
       return respond(callback, true, text, { url, paragraph: para.index + 1, wordCount: para.wordCount });
     }
 
-    // --- NTH mode: specific Nth unit ---
+    // --- NTH mode: specific Nth unit — every branch returns immediately ---
     if (inferred.mode === "nth") {
       const data = await getOrComputeProfile(runtime, url);
       if (!data) {
@@ -723,12 +786,28 @@ export const GetQuoteAction: Action = {
         return respond(callback, true, text, { url, sentenceNumber: n, lineNumber: sentence.lineNumber });
       }
       if (unit === "paragraph") {
-        inferred.mode = "paragraph";
-        inferred.count = n;
-      } else if (unit === "line") {
-        inferred.mode = "line";
-        inferred.lineNumber = n;
-      } else if (unit === "word") {
+        const para = data.profile.paragraphs[n - 1];
+        if (!para) {
+          return respond(callback, false,
+            `Paragraph ${n} not found. Document has ${data.profile.paragraphCount} paragraphs.`,
+            { error: "out_of_range", paragraphCount: data.profile.paragraphCount });
+        }
+        const paraText = data.content.substring(para.start, para.end);
+        const text = `Paragraph ${n} (lines ${para.lineStart}-${para.lineEnd}, ${para.wordCount} words):\n"${paraText}"`;
+        return respond(callback, true, text, { url, paragraph: n, wordCount: para.wordCount });
+      }
+      if (unit === "line") {
+        const line = data.profile.lines[n - 1];
+        if (!line) {
+          return respond(callback, false,
+            `Line ${n} not found. Document has ${data.profile.lineCount} lines.`,
+            { error: "out_of_range", lineCount: data.profile.lineCount });
+        }
+        const lineText = data.content.substring(line.start, line.end);
+        const text = `Line ${n}: "${lineText}"`;
+        return respond(callback, true, text, { url, lineNumber: n, content: lineText });
+      }
+      if (unit === "word") {
         const allWords = data.content.trim().split(/\s+/);
         const word = allWords[n - 1];
         if (!word) {
@@ -739,6 +818,10 @@ export const GetQuoteAction: Action = {
         const text = `Word ${n}: "${word}"`;
         return respond(callback, true, text, { url, wordNumber: n, word });
       }
+      // Unknown unit — should not happen, but return error rather than fallthrough
+      return respond(callback, false,
+        `Unknown unit "${unit}" for nth mode.`,
+        { error: "unknown_unit", unit });
     }
 
     // --- SENTENCE_RANGE mode ---
@@ -787,13 +870,94 @@ export const GetQuoteAction: Action = {
       return respond(callback, true, text, { url, paragraphStart: start + 1, paragraphEnd: actualEnd + 1 });
     }
 
-    // --- SEARCH_ALL mode ---
+    // --- SECTION mode: retrieve specific section ---
+    if (inferred.mode === "section" && inferred.sectionName) {
+      const data = await getOrComputeProfile(runtime, url);
+      if (!data) {
+        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
+      }
+      const sectionProfile = detectSections(data.content);
+      const section = sectionProfile.sections.find(s => s.name === inferred.sectionName);
+      if (!section) {
+        const available = sectionProfile.sectionNames.join(", ") || "none detected";
+        return respond(callback, false,
+          `Section "${inferred.sectionName}" not found. Available sections: ${available}.`,
+          { error: "section_not_found", sectionName: inferred.sectionName, availableSections: sectionProfile.sectionNames });
+      }
+      const text = `${section.displayName} (lines ${section.startLine}-${section.endLine}, ${section.wordCount} words):\n"${section.text}"`;
+      return respond(callback, true, text, {
+        url, sectionName: section.name, displayName: section.displayName,
+        startLine: section.startLine, endLine: section.endLine, wordCount: section.wordCount,
+      });
+    }
+
+    // --- SECTION_LIST mode: list all sections ---
+    if (inferred.mode === "section_list") {
+      const data = await getOrComputeProfile(runtime, url);
+      if (!data) {
+        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
+      }
+      const sectionProfile = detectSections(data.content);
+      if (sectionProfile.sections.length === 0) {
+        return respond(callback, false, "No sections detected in this document.", { error: "no_sections" });
+      }
+      const formatted = sectionProfile.sections.map((s, i) =>
+        `${i + 1}. ${s.displayName} (lines ${s.startLine}-${s.endLine}, ${s.wordCount} words)`
+      ).join("\n");
+      const text = `Document sections (${sectionProfile.sections.length}):\n${formatted}`;
+      return respond(callback, true, text, {
+        url, sectionCount: sectionProfile.sections.length,
+        sections: sectionProfile.sectionNames,
+        isScientificFormat: sectionProfile.isScientificFormat,
+      });
+    }
+
+    // --- COMPOUND mode: multiple nth requests combined ---
+    if (inferred.mode === "compound" && inferred.parts) {
+      const data = await getOrComputeProfile(runtime, url);
+      if (!data) {
+        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
+      }
+      const results: string[] = [];
+      for (const part of inferred.parts) {
+        const n = part.count ?? 1;
+        const unit = part.unit ?? "sentence";
+        if (unit === "sentence") {
+          const sentence = data.profile.sentences[n - 1];
+          if (sentence) results.push(`Sentence ${n} (line ${sentence.lineNumber}): "${sentence.text}"`);
+          else results.push(`Sentence ${n}: not found`);
+        } else if (unit === "paragraph") {
+          const para = data.profile.paragraphs[n - 1];
+          if (para) {
+            const paraText = data.content.substring(para.start, para.end);
+            results.push(`Paragraph ${n} (lines ${para.lineStart}-${para.lineEnd}):\n"${paraText}"`);
+          } else results.push(`Paragraph ${n}: not found`);
+        } else if (unit === "line") {
+          const line = data.profile.lines[n - 1];
+          if (line) results.push(`Line ${n}: "${data.content.substring(line.start, line.end)}"`);
+          else results.push(`Line ${n}: not found`);
+        } else if (unit === "word") {
+          const allWords = data.content.trim().split(/\s+/);
+          const word = allWords[n - 1];
+          if (word) results.push(`Word ${n}: "${word}"`);
+          else results.push(`Word ${n}: not found`);
+        }
+      }
+      const text = results.join("\n\n");
+      return respond(callback, true, text, { url, mode: "compound", partCount: inferred.parts.length });
+    }
+
+    // --- SEARCH_ALL mode (with optional countOnly) ---
     if (inferred.mode === "search_all") {
       const result = await getExactQuoteAll(runtime, url, inferred.searchText!);
       if (result.totalCount === 0) {
         return respond(callback, false,
           `No mentions of "${inferred.searchText}" found.`,
           { error: "not_found", searchText: inferred.searchText });
+      }
+      if (inferred.countOnly) {
+        const text = `"${inferred.searchText}" appears ${result.totalCount} time(s).`;
+        return respond(callback, true, text, { url, searchText: inferred.searchText, totalCount: result.totalCount });
       }
       const formatted = result.matches.map((m, i) =>
         `${i + 1}. Line ${m.lineNumber}: "...${m.context}..."`

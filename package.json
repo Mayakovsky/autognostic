@@ -24,8 +24,10 @@
     "@octokit/rest": "^21.1.1",
     "cors": "^2.8.5",
     "drizzle-orm": "^0.36.4",
+    "linkedom": "^0.18.12",
     "node-cron": "^3.0.3",
-    "ollama-ai-provider": "^1.2.0"
+    "ollama-ai-provider": "^1.2.0",
+    "unpdf": "0.11.0"
   },
   "devDependencies": {
     "@elizaos/cli": "1.6.5",
