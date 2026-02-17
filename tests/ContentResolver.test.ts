@@ -255,6 +255,30 @@ describe("ContentResolver", () => {
       expect(result.contentType).toContain("text/plain");
     });
 
+    it("academic-publisher-url: Accept header prefers PDF for known publishers", async () => {
+      const responses = new Map();
+      responses.set("https://link.springer.com/article/10.1186/s12961-017-0235-3", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+        body: ARTICLE_HTML_PAYWALL,
+      });
+      // Paywall PDF response (non-PDF content-type)
+      responses.set("https://publisher.example.com/paper.pdf", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+        body: "<html><body>Paywall</body></html>",
+      });
+
+      const mockHttp = createMockHttp(responses);
+      const resolver = new ContentResolver(mockHttp);
+      await resolver.resolve("https://link.springer.com/article/10.1186/s12961-017-0235-3");
+
+      // Verify the first HTTP call used PDF-preferring Accept header
+      const firstCall = mockHttp.get.mock.calls[0];
+      const headers = firstCall[1]?.headers;
+      expect(headers?.Accept).toContain("application/pdf");
+    });
+
     it("diagnostics-populated: diagnostics array always has entries", async () => {
       const responses = new Map();
       responses.set("https://example.com/page", {
