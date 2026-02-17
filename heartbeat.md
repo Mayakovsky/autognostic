@@ -1,5 +1,5 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-17 16:25 (local)
+> Last updated: 2026-02-17 16:27 (local)
 > Updated by: claude-pro (opus 4.6) — Phase 3 v2 planning
 > Session label: Phase 3 v2 — ingestion pipeline overhaul plan
 > Staleness gate: 2026-02-17 — if today is >3 days past this,
@@ -71,11 +71,11 @@
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-17 | Mayakovsky | phase3: WS-4 WebPageProcessor hardening | bd3fd3e |
 | 2026-02-17 | Mayakovsky | phase3: WS-3 simplify mirrorDocToKnowledge | 7a4dfc2 |
 | 2026-02-17 | Mayakovsky | phase3: WS-2 ContentResolver + PDF magic bytes | bae9945 |
 | 2026-02-17 | Mayakovsky | phase3: WS-1 build verification canary | 683f6a4 |
 | 2026-02-17 | claude-pro | Phase 3 v2 plan: full pipeline audit, PHASE3_PLAN.md, /phase3 command | plan deployed |
-| 2026-02-16 | Mayakovsky | feat: Phase 2 — grammar engine, HTML/PDF pipeline, section | 5d433f6 |
 
 ## Guardrails (DO / DON'T)
 DO:

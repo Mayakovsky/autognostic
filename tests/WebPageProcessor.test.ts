@@ -222,4 +222,47 @@ describe("WebPageProcessor", () => {
       expect(processor.findBestPdfLink(page)).toBeNull();
     });
   });
+
+  describe("hardening — publisher selectors", () => {
+    it("extracts content from class='c-article-body' when no <article> tag", () => {
+      const html = `<html><body>
+        <div class="sidebar-widget">Sidebar junk</div>
+        <div class="c-article-body">
+          <h2>Introduction</h2>
+          <p>Article content from publisher-specific class.</p>
+        </div>
+      </body></html>`;
+      const result = processor.extractFromHtml(html, "https://link.springer.com/article/test");
+      expect(result.text).toContain("Article content from publisher-specific class");
+      expect(result.text).toContain("Introduction");
+    });
+  });
+
+  describe("hardening — reference section preservation", () => {
+    it("does not strip elements with reference/bibliography class", () => {
+      const html = `<html><body>
+        <article>
+          <p>Article body text.</p>
+          <div class="related-references" id="bibliography">
+            <h2>References</h2>
+            <p>1. Smith et al., 2020. Important paper.</p>
+          </div>
+        </article>
+      </body></html>`;
+      const result = processor.extractFromHtml(html, "https://example.com");
+      expect(result.text).toContain("References");
+      expect(result.text).toContain("Smith et al.");
+    });
+  });
+
+  describe("hardening — text length guard", () => {
+    it("truncates oversized extracted text", () => {
+      // Build a huge HTML page (>500K chars of body text)
+      const bigParagraph = "<p>" + "A".repeat(100_000) + "</p>";
+      const html = `<html><body>${bigParagraph.repeat(6)}</body></html>`;
+      const result = processor.extractFromHtml(html, "https://example.com");
+      // Max is 500K — extracted text should be at most that
+      expect(result.text.length).toBeLessThanOrEqual(500_000);
+    });
+  });
 });

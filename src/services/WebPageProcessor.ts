@@ -37,6 +37,12 @@ const REMOVE_TAGS = new Set([
 /** Tags whose class/id patterns indicate non-content (ads, nav, social, etc.) */
 const JUNK_CLASS_PATTERN = /\b(nav|menu|sidebar|footer|cookie|banner|ad-|ads-|advert|popup|modal|social|share|comment|related|recommended|newsletter|signup|promo)\b/i;
 
+/** Pattern matching reference/bibliography sections — should NOT be removed by junk filter */
+const REFERENCE_SECTION_PATTERN = /\breferences?\b|\bbibliography\b|\bcitations?\b/i;
+
+/** Max extracted text length (chars) before truncation */
+const MAX_EXTRACTED_CHARS = 500_000;
+
 /** Block-level elements that produce paragraph breaks */
 const BLOCK_ELEMENTS = new Set([
   "p", "div", "section", "article", "main", "blockquote",
@@ -89,11 +95,13 @@ function domToText(node: any): string {
   // Skip removed tags (shouldn't exist after removal pass, but defensive)
   if (REMOVE_TAGS.has(tag)) return "";
 
-  // Skip elements with junk class/id patterns
+  // Skip elements with junk class/id patterns (but preserve reference sections)
   const className = node.getAttribute?.("class") || "";
   const id = node.getAttribute?.("id") || "";
   if (JUNK_CLASS_PATTERN.test(className) || JUNK_CLASS_PATTERN.test(id)) {
-    return "";
+    if (!REFERENCE_SECTION_PATTERN.test(className) && !REFERENCE_SECTION_PATTERN.test(id)) {
+      return "";
+    }
   }
 
   // Recurse into children
@@ -191,7 +199,17 @@ function domToText(node: any): string {
  * - Remove blank lines that are just spaces
  */
 function cleanExtractedText(raw: string): string {
-  return raw
+  let text = raw;
+
+  // Truncate oversized text before expensive regex passes
+  if (text.length > MAX_EXTRACTED_CHARS) {
+    console.warn(
+      `[autognostic] Extracted text exceeds ${MAX_EXTRACTED_CHARS} chars (${text.length}), truncating`
+    );
+    text = text.slice(0, MAX_EXTRACTED_CHARS);
+  }
+
+  return text
     // Normalize line endings
     .replace(/\r\n/g, "\n")
     // Trim trailing whitespace per line
@@ -237,20 +255,29 @@ export class WebPageProcessor {
     }
 
     // Remove elements with junk class/id patterns (ads, nav, sidebars, etc.)
+    // Exception: preserve reference/bibliography sections
     const allElements = document.querySelectorAll("*");
     for (const el of allElements) {
       const cn = (el as Element).getAttribute?.("class") || "";
       const elId = (el as Element).getAttribute?.("id") || "";
       if (JUNK_CLASS_PATTERN.test(cn) || JUNK_CLASS_PATTERN.test(elId)) {
+        // Don't remove reference sections
+        if (REFERENCE_SECTION_PATTERN.test(cn) || REFERENCE_SECTION_PATTERN.test(elId)) {
+          continue;
+        }
         (el as Element).remove();
       }
     }
 
-    // Prefer <article> or <main> if present
+    // Prefer <article> or known publisher content selectors
     const contentRoot =
       document.querySelector("article") ||
-      document.querySelector("main") ||
+      document.querySelector("[class*='article-body']") ||
+      document.querySelector("[class*='article-content']") ||
+      document.querySelector("[class*='fulltext']") ||
+      document.querySelector("[class*='paper-content']") ||
       document.querySelector("[role='main']") ||
+      document.querySelector("main") ||
       document.body;
 
     // Walk DOM tree and convert to structured text
