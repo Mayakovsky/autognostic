@@ -38,3 +38,6 @@ plugin-datamirror/
 
 # SeshMem session metadata
 .seshmem/
+
+# Auto-generated build metadata
+src/config/buildmeta.ts

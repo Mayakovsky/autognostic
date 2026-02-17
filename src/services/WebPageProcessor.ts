@@ -1,6 +1,10 @@
 /**
  * WebPageProcessor — HTML→text extraction + PDF link discovery.
  * Uses linkedom for lightweight DOM parsing.
+ *
+ * Text extraction walks the DOM tree and converts elements to structured
+ * plain text with paragraph breaks, heading markers, and list prefixes.
+ * This preserves document structure for downstream sentence/paragraph profiling.
  */
 
 import { parseHTML } from "linkedom";
@@ -30,6 +34,24 @@ const REMOVE_TAGS = new Set([
   "noscript", "iframe", "svg", "form",
 ]);
 
+/** Tags whose class/id patterns indicate non-content (ads, nav, social, etc.) */
+const JUNK_CLASS_PATTERN = /\b(nav|menu|sidebar|footer|cookie|banner|ad-|ads-|advert|popup|modal|social|share|comment|related|recommended|newsletter|signup|promo)\b/i;
+
+/** Block-level elements that produce paragraph breaks */
+const BLOCK_ELEMENTS = new Set([
+  "p", "div", "section", "article", "main", "blockquote",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "ul", "ol", "li", "dl", "dt", "dd",
+  "table", "tr", "thead", "tbody", "tfoot",
+  "figure", "figcaption", "details", "summary",
+  "pre", "address",
+]);
+
+/** Heading elements mapped to markdown-style prefixes */
+const HEADING_PREFIX: Record<string, string> = {
+  h1: "# ", h2: "## ", h3: "### ", h4: "#### ", h5: "##### ", h6: "###### ",
+};
+
 function classifyLink(href: string, text: string): PageLink["type"] {
   const lower = href.toLowerCase();
   if (lower.endsWith(".pdf") || lower.includes("/pdf/")) return "pdf";
@@ -45,6 +67,141 @@ function resolveUrl(href: string, baseUrl: string): string {
   } catch {
     return href;
   }
+}
+
+/**
+ * Walk the DOM tree and convert to structured plain text.
+ * Preserves paragraph breaks, headings, list items, blockquotes, and table rows.
+ */
+function domToText(node: any): string {
+  if (!node) return "";
+
+  // Text node — return content, collapsing internal whitespace runs
+  if (node.nodeType === 3 /* TEXT_NODE */) {
+    return (node.textContent || "").replace(/[ \t]+/g, " ");
+  }
+
+  // Not an element — skip
+  if (node.nodeType !== 1 /* ELEMENT_NODE */) return "";
+
+  const tag = (node.tagName || "").toLowerCase();
+
+  // Skip removed tags (shouldn't exist after removal pass, but defensive)
+  if (REMOVE_TAGS.has(tag)) return "";
+
+  // Skip elements with junk class/id patterns
+  const className = node.getAttribute?.("class") || "";
+  const id = node.getAttribute?.("id") || "";
+  if (JUNK_CLASS_PATTERN.test(className) || JUNK_CLASS_PATTERN.test(id)) {
+    return "";
+  }
+
+  // Recurse into children
+  const childText = Array.from(node.childNodes || [])
+    .map((child: any) => domToText(child))
+    .join("");
+
+  // Apply element-specific formatting
+  switch (tag) {
+    // Headings → markdown prefix + double newline
+    case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": {
+      const trimmed = childText.trim();
+      if (!trimmed) return "";
+      return `\n\n${HEADING_PREFIX[tag]}${trimmed}\n\n`;
+    }
+
+    // Paragraphs → double newline separation
+    case "p": {
+      const trimmed = childText.trim();
+      if (!trimmed) return "";
+      return `\n\n${trimmed}\n\n`;
+    }
+
+    // Line breaks
+    case "br":
+      return "\n";
+
+    // Blockquotes → "> " prefix per line
+    case "blockquote": {
+      const trimmed = childText.trim();
+      if (!trimmed) return "";
+      const quoted = trimmed
+        .split("\n")
+        .map((line: string) => `> ${line}`)
+        .join("\n");
+      return `\n\n${quoted}\n\n`;
+    }
+
+    // List items → "- " prefix
+    case "li": {
+      const trimmed = childText.trim();
+      if (!trimmed) return "";
+      return `\n- ${trimmed}`;
+    }
+
+    // Lists → wrap with newlines
+    case "ul": case "ol":
+      return `\n${childText}\n`;
+
+    // Table cells → tab-separated
+    case "td": case "th":
+      return `${childText.trim()}\t`;
+
+    // Table rows → newline-separated, strip trailing tab
+    case "tr":
+      return `\n${childText.replace(/\t$/, "")}`;
+
+    // Tables → wrap with newlines
+    case "table":
+      return `\n${childText}\n`;
+
+    // Pre → preserve whitespace as-is
+    case "pre":
+      return `\n\n${node.textContent || ""}\n\n`;
+
+    // Div and section → add paragraph breaks if they contain block content
+    case "div": case "section": case "article": case "main": {
+      // Only add breaks if this div likely wraps paragraph-level content
+      const trimmed = childText.trim();
+      if (!trimmed) return "";
+      // If the child text already starts/ends with newlines, don't double up
+      if (trimmed.startsWith("\n") || trimmed.endsWith("\n")) {
+        return childText;
+      }
+      return `\n\n${trimmed}\n\n`;
+    }
+
+    // Figure caption
+    case "figcaption": {
+      const trimmed = childText.trim();
+      if (!trimmed) return "";
+      return `\n[${trimmed}]\n`;
+    }
+
+    // Inline elements — pass through
+    default:
+      return childText;
+  }
+}
+
+/**
+ * Clean up the raw extracted text:
+ * - Collapse 3+ newlines to 2 (paragraph breaks)
+ * - Trim leading/trailing whitespace per line
+ * - Remove blank lines that are just spaces
+ */
+function cleanExtractedText(raw: string): string {
+  return raw
+    // Normalize line endings
+    .replace(/\r\n/g, "\n")
+    // Trim trailing whitespace per line
+    .replace(/[ \t]+$/gm, "")
+    // Collapse 3+ consecutive newlines to exactly 2
+    .replace(/\n{3,}/g, "\n\n")
+    // Remove lines that are only whitespace
+    .replace(/^\s+$/gm, "")
+    // Final trim
+    .trim();
 }
 
 export class WebPageProcessor {
@@ -79,6 +236,16 @@ export class WebPageProcessor {
       }
     }
 
+    // Remove elements with junk class/id patterns (ads, nav, sidebars, etc.)
+    const allElements = document.querySelectorAll("*");
+    for (const el of allElements) {
+      const cn = (el as Element).getAttribute?.("class") || "";
+      const elId = (el as Element).getAttribute?.("id") || "";
+      if (JUNK_CLASS_PATTERN.test(cn) || JUNK_CLASS_PATTERN.test(elId)) {
+        (el as Element).remove();
+      }
+    }
+
     // Prefer <article> or <main> if present
     const contentRoot =
       document.querySelector("article") ||
@@ -86,12 +253,12 @@ export class WebPageProcessor {
       document.querySelector("[role='main']") ||
       document.body;
 
-    // Extract text
-    const text = contentRoot?.textContent
-      ?.replace(/\s+/g, " ")
-      .trim() || "";
+    // Walk DOM tree and convert to structured text
+    const rawText = domToText(contentRoot);
+    const text = cleanExtractedText(rawText);
 
-    // Extract links
+    // Extract links (re-parse since we may have removed elements)
+    // Use the full document for link extraction, not just content root
     const anchors = document.querySelectorAll("a[href]");
     const links: PageLink[] = [];
     const pdfLinks: PageLink[] = [];

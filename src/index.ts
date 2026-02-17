@@ -1,5 +1,6 @@
 import type { Plugin, IAgentRuntime } from "@elizaos/core";
 import { ModelType } from "@elizaos/core";
+import { BUILD_META } from "./config/buildmeta";
 import { ollamaDirectEmbed } from "./providers/ollamaDirectEmbed";
 
 import { HttpService } from "./services/httpService";
@@ -27,6 +28,7 @@ import { autognosticSchema } from "./schema";
  * Seeds reference data (taxonomy nodes, controlled vocabulary).
  */
 async function initPlugin(_config: Record<string, string>, runtime: IAgentRuntime): Promise<void> {
+  console.log(`[autognostic] Plugin loaded — Phase ${BUILD_META.phase}, built ${BUILD_META.builtAt}`);
   console.log("[autognostic] Initializing plugin...");
   
   // Give database time to initialize (especially for PGlite)

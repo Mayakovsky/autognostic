@@ -18,8 +18,11 @@ export interface PdfExtractionResult {
 
 export class PdfExtractor {
   async extract(buffer: Buffer | Uint8Array): Promise<PdfExtractionResult> {
-    const data =
-      buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    // unpdf requires Uint8Array, not Buffer — Bun treats them differently
+    const data = buffer instanceof Buffer
+      ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+      : buffer;
+
     const doc = await getDocumentProxy(data);
 
     const { text, totalPages } = await extractText(doc, { mergePages: true });
