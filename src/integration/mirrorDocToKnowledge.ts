@@ -1,54 +1,11 @@
 import type { IAgentRuntime, UUID } from "@elizaos/core";
 import type { KnowledgeService } from "@elizaos/plugin-knowledge";
 import { HttpService } from "../services/httpService";
+import { ContentResolver } from "../services/ContentResolver";
 import { randomUUID, createHash } from "crypto";
 import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
-import { withRetry } from "../utils/retry";
 import { analyzeDocument } from "../services/DocumentAnalyzer";
-import { WebPageProcessor } from "../services/WebPageProcessor";
-import { PdfExtractor } from "../services/PdfExtractor";
-
-/**
- * Convert URLs to their raw content equivalents.
- * - GitHub blob URLs → raw.githubusercontent.com
- * - GitLab blob URLs → raw URLs
- * - Gist URLs → raw URLs
- */
-function normalizeToRawUrl(url: string): string {
-  const parsed = new URL(url);
-
-  // GitHub: github.com/:owner/:repo/blob/:branch/:path
-  // → raw.githubusercontent.com/:owner/:repo/:branch/:path
-  if (parsed.hostname === "github.com" || parsed.hostname === "www.github.com") {
-    const match = parsed.pathname.match(/^\/([^/]+)\/([^/]+)\/blob\/(.+)$/);
-    if (match) {
-      const [, owner, repo, rest] = match;
-      return `https://raw.githubusercontent.com/${owner}/${repo}/${rest}`;
-    }
-  }
-
-  // GitHub Gist: gist.github.com/:user/:gistId → raw URL
-  if (parsed.hostname === "gist.github.com") {
-    const match = parsed.pathname.match(/^\/([^/]+)\/([^/]+)\/?$/);
-    if (match) {
-      const [, user, gistId] = match;
-      return `https://gist.githubusercontent.com/${user}/${gistId}/raw`;
-    }
-  }
-
-  // GitLab: gitlab.com/:owner/:repo/-/blob/:branch/:path
-  // → gitlab.com/:owner/:repo/-/raw/:branch/:path
-  if (parsed.hostname === "gitlab.com" || parsed.hostname.includes("gitlab")) {
-    const blobMatch = parsed.pathname.match(/^(.+)\/-\/blob\/(.+)$/);
-    if (blobMatch) {
-      const [, projectPath, rest] = blobMatch;
-      return `https://${parsed.hostname}${projectPath}/-/raw/${rest}`;
-    }
-  }
-
-  // Return original URL if no transformation needed
-  return url;
-}
+import { logger } from "../utils/logger";
 
 export interface MirrorDocParams {
   url: string;
@@ -66,6 +23,7 @@ export async function mirrorDocToKnowledge(
 ) {
   const http =
     runtime.getService<HttpService>("http") ?? new HttpService(runtime);
+  const resolver = new ContentResolver(http);
 
   const knowledge = runtime.getService<KnowledgeService>("knowledge");
   if (!knowledge) {
@@ -74,195 +32,66 @@ export async function mirrorDocToKnowledge(
     );
   }
 
-  // Convert GitHub/GitLab blob URLs to raw content URLs
-  const rawUrl = normalizeToRawUrl(params.url);
+  // === CONTENT RESOLUTION (replaces all fetch/parse/PDF logic) ===
+  const resolved = await resolver.resolve(params.url);
 
-  // Determine if this is likely a text file based on extension
-  const textExtensions = [".md", ".txt", ".json", ".xml", ".yaml", ".yml", ".csv", ".html", ".htm", ".js", ".ts", ".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".css", ".scss", ".less"];
-  const isLikelyText = textExtensions.some(ext => rawUrl.toLowerCase().endsWith(ext)) ||
-                       params.contentType?.startsWith("text/");
-
-  let content: string;
-  let contentType: string;
-
-  if (isLikelyText) {
-    // Use getRawText for text content - includes HTML detection
-    const result = await withRetry(
-      () => http.getRawText(rawUrl),
-      { maxAttempts: 3, initialDelayMs: 1000 },
-      `fetch ${rawUrl}`
-    );
-    content = result.content;
-    contentType = params.contentType || result.contentType;
-
-    // HTML received when expecting text — extract clean text or follow PDF link
-    if (result.isHtml && !rawUrl.toLowerCase().endsWith(".html") && !rawUrl.toLowerCase().endsWith(".htm")) {
-      console.warn(
-        `[autognostic] WARNING: Received HTML content from ${rawUrl} - ` +
-        `the URL may be a webpage wrapper instead of raw content. ` +
-        `Original URL: ${params.url}`
-      );
-      try {
-        const processor = new WebPageProcessor();
-        const extracted = processor.extractFromHtml(result.content, rawUrl);
-        // Default to the clean extracted article text — this is our safety net
-        let usedPdf = false;
-        const pdfLink = processor.findBestPdfLink(extracted);
-        if (pdfLink) {
-          // Try to download and extract PDF
-          try {
-            const pdfRes = await http.get(pdfLink.href);
-            const pdfContentType = pdfRes.headers.get("content-type") || "";
-            // Only attempt PDF extraction if the response is actually a PDF
-            if (pdfRes.ok && pdfContentType.includes("application/pdf")) {
-              const extractor = new PdfExtractor();
-              const pdfBytes = new Uint8Array(await pdfRes.arrayBuffer());
-              const pdfResult = await extractor.extract(pdfBytes);
-              content = pdfResult.text;
-              contentType = "text/plain";
-              usedPdf = true;
-              console.debug(
-                `[autognostic] Extracted ${pdfResult.pageCount} pages from PDF: ${pdfLink.href}`
-              );
-            } else {
-              console.debug(
-                `[autognostic] PDF link returned non-PDF content-type: ${pdfContentType} — using extracted HTML text`
-              );
-            }
-          } catch (pdfErr) {
-            console.debug(`[autognostic] PDF extraction failed:`, pdfErr);
-          }
-        }
-        // Fall back to extracted clean article text if PDF didn't work
-        if (!usedPdf) {
-          content = extracted.text;
-          contentType = "text/plain";
-          console.debug(
-            `[autognostic] Using extracted HTML text (${extracted.text.length} chars)`
-          );
-        }
-      } catch (htmlErr) {
-        console.debug(`[autognostic] HTML processing failed, using raw content:`, htmlErr);
-        // Fall through with original content
-      }
-    }
-  } else {
-    // For binary or unknown content types, fetch normally
-    const res = await withRetry(
-      () => http.get(rawUrl),
-      { maxAttempts: 3, initialDelayMs: 1000 },
-      `fetch ${rawUrl}`
-    );
-    contentType = params.contentType || res.headers.get("content-type") || "application/octet-stream";
-
-    if (contentType.startsWith("application/") && !contentType.includes("json")) {
-      const buf = Buffer.from(await res.arrayBuffer());
-      content = buf.toString("base64");
-    } else {
-      content = await res.text();
-    }
-
-    // HTML received from extensionless URL (academic publishers, etc.) — extract clean text or follow PDF link
-    const isHtmlResponse = contentType.includes("text/html") ||
-      content.trimStart().toLowerCase().startsWith("<!doctype") ||
-      content.trimStart().toLowerCase().startsWith("<html");
-    if (isHtmlResponse) {
-      console.warn(
-        `[autognostic] HTML response from extensionless URL ${rawUrl} — applying WebPageProcessor pipeline`
-      );
-      try {
-        const processor = new WebPageProcessor();
-        const extracted = processor.extractFromHtml(content, rawUrl);
-        // Default to the clean extracted article text — this is our safety net
-        let usedPdf = false;
-        const pdfLink = processor.findBestPdfLink(extracted);
-        if (pdfLink) {
-          try {
-            const pdfRes = await http.get(pdfLink.href);
-            const pdfContentType = pdfRes.headers.get("content-type") || "";
-            // Only attempt PDF extraction if the response is actually a PDF
-            if (pdfRes.ok && pdfContentType.includes("application/pdf")) {
-              const extractor = new PdfExtractor();
-              const pdfBytes = new Uint8Array(await pdfRes.arrayBuffer());
-              const pdfResult = await extractor.extract(pdfBytes);
-              content = pdfResult.text;
-              contentType = "text/plain";
-              usedPdf = true;
-              console.debug(
-                `[autognostic] Extracted ${pdfResult.pageCount} pages from PDF: ${pdfLink.href}`
-              );
-            } else {
-              console.debug(
-                `[autognostic] PDF link returned non-PDF content-type: ${pdfContentType} — using extracted HTML text`
-              );
-            }
-          } catch (pdfErr) {
-            console.debug(`[autognostic] PDF extraction failed:`, pdfErr);
-          }
-        }
-        // Fall back to extracted clean article text if PDF didn't work
-        if (!usedPdf) {
-          content = extracted.text;
-          contentType = "text/plain";
-          console.debug(
-            `[autognostic] Using extracted HTML text (${extracted.text.length} chars)`
-          );
-        }
-      } catch (htmlErr) {
-        console.debug(`[autognostic] HTML processing failed, using raw content:`, htmlErr);
-      }
-    }
+  // Log diagnostics at debug level (visible with LOG_LEVEL=debug)
+  const log = logger.child({ operation: "mirrorDocToKnowledge", url: params.url });
+  for (const d of resolved.diagnostics) {
+    log.debug(d);
   }
+  log.info("Content resolved", {
+    source: resolved.source,
+    textLength: resolved.text.length,
+    resolvedUrl: resolved.resolvedUrl,
+  });
 
-  // Store full document for exact quote retrieval
+  // === VERBATIM DOCUMENT STORAGE ===
+  // Only store if caller provided sourceId + versionId
+  // (addUrlToKnowledgeAction does; ReconciliationService does NOT)
   const sourceId = params.metadata?.sourceId as string | undefined;
   const versionId = params.metadata?.versionId as string | undefined;
   if (sourceId && versionId) {
-    const contentHash = createHash("sha256").update(content).digest("hex");
+    const contentHash = createHash("sha256").update(resolved.text).digest("hex");
 
     // Store with original URL (what user likely mentions in conversation)
     await autognosticDocumentsRepository.store(runtime, {
       sourceId,
       versionId,
       url: params.url,
-      content,
+      content: resolved.text,
       contentHash,
-      mimeType: contentType,
-      byteSize: Buffer.byteLength(content, "utf8"),
+      mimeType: resolved.contentType,
+      byteSize: Buffer.byteLength(resolved.text, "utf8"),
     });
 
     // Compute and store structural profile for retrieval
     try {
-      const profile = analyzeDocument(content);
+      const profile = analyzeDocument(resolved.text);
       await autognosticDocumentsRepository.updateProfile(runtime, params.url, profile);
     } catch (err) {
-      console.debug(`[autognostic] Profile analysis failed (non-fatal):`, err);
+      log.debug("Profile analysis failed (non-fatal)");
     }
 
-    // Also store with raw URL if different (for flexible lookup)
-    if (rawUrl !== params.url) {
+    // Also store with resolved URL if different (for flexible lookup)
+    if (resolved.resolvedUrl !== params.url) {
       try {
         await autognosticDocumentsRepository.store(runtime, {
           sourceId: randomUUID(),
           versionId,
-          url: rawUrl,
-          content,
+          url: resolved.resolvedUrl,
+          content: resolved.text,
           contentHash,
-          mimeType: contentType,
-          byteSize: Buffer.byteLength(content, "utf8"),
+          mimeType: resolved.contentType,
+          byteSize: Buffer.byteLength(resolved.text, "utf8"),
         });
-        // Also store profile for raw URL variant
-        try {
-          const profile = analyzeDocument(content);
-          await autognosticDocumentsRepository.updateProfile(runtime, rawUrl, profile);
-        } catch { /* non-fatal */ }
-      } catch (err) {
-        // Ignore duplicate key errors - rawUrl might already exist
-        console.debug(`[autognostic] Could not store raw URL entry:`, err);
-      }
+        const profile = analyzeDocument(resolved.text);
+        await autognosticDocumentsRepository.updateProfile(runtime, resolved.resolvedUrl, profile);
+      } catch { /* duplicate key or non-fatal */ }
     }
   }
 
+  // === PUSH TO KNOWLEDGE SERVICE ===
   const clientDocumentId = randomUUID();
   const worldId = params.worldId ?? runtime.agentId;
 
@@ -272,12 +101,13 @@ export async function mirrorDocToKnowledge(
     entityId: params.entityId,
     clientDocumentId,
     originalFilename: params.filename,
-    contentType,
-    content,
+    contentType: resolved.contentType,
+    content: resolved.text,
     metadata: {
       sourceUrl: params.url,
-      rawUrl: rawUrl !== params.url ? rawUrl : undefined,
+      rawUrl: resolved.resolvedUrl !== params.url ? resolved.resolvedUrl : undefined,
       autognostic: true,
+      contentSource: resolved.source,
       ...(params.metadata ?? {}),
     },
   });
