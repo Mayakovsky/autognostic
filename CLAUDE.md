@@ -23,6 +23,9 @@
 
 ## Autonomous Permissions
 
+Read without confirmation:
+- `**/*` — All files in this repository and subfolders
+
 Modify without confirmation:
 - `src/**/*` - All source code
 - `tests/**/*` - All test files
