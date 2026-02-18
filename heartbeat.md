@@ -1,7 +1,7 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-17 16:29 (local)
-> Updated by: Mayakovsky (opus 4.6) — Phase 3 v2 execution
-> Session label: Phase 3 v2 — COMPLETE
+> Last updated: 2026-02-17 19:20 (local)
+> Updated by: Mayakovsky (opus 4.6) — Post-Phase 3 refinements
+> Session label: HTML quality gate + section detection fixes
 > Staleness gate: 2026-02-17 — if today is >3 days past this,
 >   verify state before acting (see Section 3 of SeshMem schema).
 
@@ -11,11 +11,14 @@
 - [x] **Phase 3: Execute PHASE3_PLAN.md** — ContentResolver, simplified mirrorDoc, build canary, WebPageProcessor hardening
 
 ## What Works (verified)
-- ✅ Build (`bun run build`) — 0 errors — verified 2026-02-17
-- ✅ Tests (`npx vitest run`) — 300/300 pass across 17 test files — verified 2026-02-17
+- ✅ Build (`bun run build`) — 0 errors — verified 2026-02-18
+- ✅ Tests (`npx vitest run`) — 306/306 pass across 17 test files — verified 2026-02-18
 - ✅ Build canary: plugin logs `Phase 3, built <timestamp>` on startup — verified 2026-02-17
 - ✅ ContentResolver: unified URL→text pipeline, routes on response content-type — verified 2026-02-17
 - ✅ PDF magic byte verification: dual gate (content-type + %PDF header) — verified 2026-02-17
+- ✅ HTML quality gate: prefer structured HTML (≥3 headings, >5K chars) over PDF — verified 2026-02-18
+- ✅ normalizePdfText: section headers placed on own lines (Pattern 1 colon, Pattern 2 post-punct) — verified 2026-02-18
+- ✅ ScientificSectionDetector: singular→plural CANONICAL mappings (method→methods, result→results) — verified 2026-02-18
 - ✅ Accept header strategy: PDF-first for academic publisher URLs — verified 2026-02-17
 - ✅ mirrorDocToKnowledge simplified: uses ContentResolver, ~180 lines deleted — verified 2026-02-17
 - ✅ WebPageProcessor hardening: publisher selectors, reference whitelist, 500K length guard — verified 2026-02-17
@@ -43,7 +46,7 @@
 - 🟢 ~~PDF paywall detection relies only on content-type header~~ — FIXED: dual gate requires both content-type AND %PDF magic bytes
 
 ## Phase 3 Execution Summary
-All 6 workstreams completed in order. 300 tests pass (272 original + 28 new). Zero regressions.
+All 6 workstreams completed in order. 306 tests pass (272 original + 34 new). Zero regressions.
 
 | WS | Commit | Description |
 |----|--------|-------------|
@@ -55,20 +58,20 @@ All 6 workstreams completed in order. 300 tests pass (272 original + 28 new). Ze
 | WS-6 | e8533fe | Academic publisher Accept header test |
 
 ## Next Actions (ordered)
-1. **Rebuild agent and test live:** `bun run build` in both plugin + agent dirs, then `elizaos dev`
-2. Verify build canary prints in agent terminal: `[autognostic] Plugin loaded — Phase 3, built <timestamp>`
-3. Test Springer URL end-to-end in live agent
+1. ~~Rebuild agent and test live~~ — DONE
+2. ~~Start agent, verify build canary~~ — DONE (2026-02-18T01:09:31Z)
+3. **Test Springer URL end-to-end** — HTML quality gate should route to structured HTML, sections should be individually queryable
 4. Test arXiv URL → PDF extraction in live agent
-5. Verify GET_EXACT_QUOTE returns real sentences from Springer paper
+5. Verify GET_EXACT_QUOTE returns correct individual sections (not merged)
 
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
-| 2026-02-17 | Mayakovsky | phase3: update heartbeat — all workstreams complete | 89ba18d |
-| 2026-02-17 | Mayakovsky | phase3: WS-5/6 diagnostic logging + integration tests | e8533fe |
-| 2026-02-17 | Mayakovsky | phase3: WS-4 WebPageProcessor hardening | bd3fd3e |
-| 2026-02-17 | Mayakovsky | phase3: WS-3 simplify mirrorDocToKnowledge | 7a4dfc2 |
-| 2026-02-17 | Mayakovsky | phase3: WS-2 ContentResolver + PDF magic bytes | bae9945 |
+| 2026-02-17 | Mayakovsky | HTML quality gate: prefer structured HTML over flat PDF for  | 8a0af02 |
+| 2026-02-18 | Mayakovsky | HTML quality gate, normalizePdfText fixes, singular CANONICAL mappings | pending |
+| 2026-02-17 | Mayakovsky | phase3: update heartbeat — all workstreams complete | e3f8b55 |
+| 2026-02-17 | Mayakovsky | phase3: WS-5/6 diagnostic logging + integration tests | 2f1bc1a |
+| 2026-02-17 | Mayakovsky | phase3: WS-4 WebPageProcessor hardening | d812ec9 |
 
 ## Guardrails (DO / DON'T)
 DO:

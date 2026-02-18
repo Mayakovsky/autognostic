@@ -41,6 +41,8 @@ export const SECTION_NAMES = new Set([
 
 /** Map variations to canonical names */
 const CANONICAL: Record<string, string> = {
+  method: "methods",
+  result: "results",
   conclusions: "conclusion",
   acknowledgements: "acknowledgments",
   bibliography: "references",

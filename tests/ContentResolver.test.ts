@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { isPdfBytes, normalizeToRawUrl } from "../src/services/ContentResolver";
+import { isPdfBytes, normalizeToRawUrl, normalizePdfText } from "../src/services/ContentResolver";
 
 // Minimal valid %PDF header bytes for testing
 const PDF_MAGIC = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]); // %PDF-1.4
@@ -85,6 +85,28 @@ const ARTICLE_HTML_GOOD_PDF = `<!DOCTYPE html>
   <article>
     <h1>Open Access Paper</h1>
     <p>This paper is freely available.</p>
+  </article>
+</body></html>`;
+
+// Structured HTML with proper heading hierarchy (simulates open-access paper)
+// Content must exceed 5000 chars for quality gate to trigger
+const FILLER = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(50);
+const ARTICLE_HTML_STRUCTURED = `<!DOCTYPE html>
+<html><head>
+  <title>Structured Open Access Paper</title>
+  <meta name="citation_pdf_url" content="https://publisher.example.com/structured.pdf">
+</head><body>
+  <article>
+    <h1>Structured Open Access Paper</h1>
+    <p>Background: This is the abstract inline summary. Method: We used surveys. Results: Positive outcomes.</p>
+    <h2>Background</h2>
+    <p>${FILLER}</p>
+    <h2>Methods</h2>
+    <p>${FILLER}</p>
+    <h2>Results</h2>
+    <p>${FILLER}</p>
+    <h2>Discussion</h2>
+    <p>${FILLER}</p>
   </article>
 </body></html>`;
 
@@ -255,6 +277,42 @@ describe("ContentResolver", () => {
       expect(result.contentType).toContain("text/plain");
     });
 
+    it("structured-html-preferred: skips PDF when HTML has heading hierarchy", async () => {
+      pdfExtractResult = {
+        text: "Flat PDF text with no headings at all.",
+        pageCount: 5,
+        metadata: { title: "PDF Title" },
+      };
+
+      const responses = new Map();
+      responses.set("https://publisher.example.com/article/789", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        body: ARTICLE_HTML_STRUCTURED,
+      });
+      // PDF exists and is valid — but should NOT be downloaded
+      responses.set("https://publisher.example.com/structured.pdf", {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+        body: PDF_MAGIC,
+      });
+
+      const mockHttp = createMockHttp(responses);
+      const resolver = new ContentResolver(mockHttp);
+      const result = await resolver.resolve("https://publisher.example.com/article/789");
+
+      // Should use HTML, not PDF
+      expect(result.source).toBe("html");
+      expect(result.text).toContain("## Background");
+      expect(result.text).toContain("## Methods");
+      expect(result.text).toContain("## Results");
+      // Abstract inline headers should NOT have markdown prefixes
+      expect(result.text).toContain("Background: This is the abstract");
+      // PDF URL should not have been fetched
+      expect(mockHttp.get).toHaveBeenCalledTimes(1);
+      expect(result.diagnostics.some(d => d.includes("skipping PDF download"))).toBe(true);
+    });
+
     it("academic-publisher-url: Accept header prefers PDF for known publishers", async () => {
       const responses = new Map();
       responses.set("https://link.springer.com/article/10.1186/s12961-017-0235-3", {
@@ -333,6 +391,59 @@ describe("ContentResolver", () => {
     it("returns non-matching URLs unchanged", () => {
       const url = "https://example.com/page";
       expect(normalizeToRawUrl(url)).toBe(url);
+    });
+  });
+
+  describe("normalizePdfText()", () => {
+    it("puts section headers with colons on their own lines", () => {
+      const flat =
+        "Author Name 1,2 Abstract Background: In 1982, the Annals published a paper showing results. " +
+        "Method: A total of 3366 articles were retrieved. " +
+        "Results: Most publications are not available directly. " +
+        "Conclusions: Although OA may help in building capacity.";
+      const result = normalizePdfText(flat);
+      // Headers should be on their own lines (newline after colon)
+      expect(result).toContain("\n\nBackground:\n");
+      expect(result).toContain("\n\nMethod:\n");
+      expect(result).toContain("\n\nResults:\n");
+      expect(result).toContain("\n\nConclusions:\n");
+    });
+
+    it("inserts newlines before section headers after sentence-ending punctuation", () => {
+      const flat =
+        "This paper examines global health. " +
+        "Background The field has expanded significantly. " +
+        "Methods We conducted a systematic review. " +
+        "Results Most publications are not available. " +
+        "Conclusions OA may help in building capacity.";
+      const result = normalizePdfText(flat);
+      expect(result).toContain("\n\nBackground\n");
+      expect(result).toContain("\n\nMethods\n");
+      expect(result).toContain("\n\nResults\n");
+      expect(result).toContain("\n\nConclusions\n");
+    });
+
+    it("preserves text that already has line breaks", () => {
+      const structured =
+        "# Title\n\nAbstract\nThis paper.\n\nMethods\nWe did stuff.\n\nResults\nGood results.\n";
+      const result = normalizePdfText(structured);
+      // Should be unchanged since it already has line structure
+      expect(result).toBe(structured);
+    });
+
+    it("returns short text unchanged", () => {
+      const short = "Just a short string.";
+      expect(normalizePdfText(short)).toBe(short);
+    });
+
+    it("breaks sentence-ending periods before capitals in very flat text", () => {
+      const flat =
+        "A".repeat(3000) + ". " +
+        "First sentence here. Second sentence follows. Third one too. " +
+        "Fourth sentence. Fifth sentence. Sixth sentence here.";
+      const result = normalizePdfText(flat);
+      // Should have broken some sentence boundaries
+      expect(result.split("\n").length).toBeGreaterThan(1);
     });
   });
 });

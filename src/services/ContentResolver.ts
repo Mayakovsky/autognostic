@@ -30,6 +30,60 @@ export interface ResolvedContent {
 
 const MAX_TEXT_LENGTH = 500_000;
 
+/**
+ * Section name alternation for regex matching.
+ * Order matters: longer names first to avoid partial matches.
+ */
+const SECTION_NAMES_RE =
+  "Materials and Methods|Results and Discussion|Literature Review|Related Works?" +
+  "|Supplementary Materials?|Acknowledgements?|Acknowledgments?" +
+  "|Introduction|Background|Methodology|Bibliography|Conclusions?" +
+  "|Discussion|References|Appendix|Methods?|Results?|Abstract|Keywords";
+
+/**
+ * Normalize flat PDF text by re-inserting line breaks.
+ * unpdf with mergePages:true often produces a single line of text.
+ * This detects that case and inserts paragraph breaks before known section headers.
+ */
+export function normalizePdfText(text: string): string {
+  if (!text || text.length < 100) return text;
+
+  const lineCount = text.split("\n").length;
+  // If text already has reasonable line structure (at least 1 line per 500 chars), leave it
+  if (text.length > 500 && lineCount > text.length / 500) return text;
+
+  let result = text;
+
+  // Pattern 1: Section name followed by colon (e.g., "Background: text...")
+  // Insert \n\n before and \n after so the header is on its own line
+  const colonRe = new RegExp(
+    `(\\s)(${SECTION_NAMES_RE})(\\s*:)`,
+    "gi"
+  );
+  result = result.replace(colonRe, "$1\n\n$2$3\n");
+
+  // Pattern 2: Section name after sentence-ending punctuation (e.g., "...results. Methods We...")
+  // Insert \n\n before and \n after so the header is on its own line
+  const afterPuncRe = new RegExp(
+    `([.!?])\\s+(${SECTION_NAMES_RE})\\s`,
+    "gi"
+  );
+  result = result.replace(afterPuncRe, "$1\n\n$2\n");
+
+  // Pattern 3: Standalone "Abstract" often appears without punctuation before it
+  // (e.g., "Author Name 1,2 Abstract Background:")
+  result = result.replace(/(\d[,*]?\s+)(Abstract)\s/gi, "$1\n\n$2\n");
+
+  // Step 2: If text is still very flat (>2000 chars per line average),
+  // break on sentence-ending period followed by capital letter
+  const newLineCount = result.split("\n").length;
+  if (newLineCount < result.length / 2000) {
+    result = result.replace(/(\.) ([A-Z][a-z])/g, "$1\n$2");
+  }
+
+  return result;
+}
+
 export class ContentResolver {
   private http: HttpService;
   private webProcessor: WebPageProcessor;
@@ -111,7 +165,11 @@ export class ContentResolver {
 
     diagnostics.push("Direct PDF response — extracting text");
     const result = await this.pdfExtractor.extract(bytes);
-    const text = this.truncateText(result.text, diagnostics);
+    const normalized = normalizePdfText(result.text);
+    if (normalized !== result.text) {
+      diagnostics.push(`PDF text normalized: ${result.text.split("\n").length} → ${normalized.split("\n").length} lines`);
+    }
+    const text = this.truncateText(normalized, diagnostics);
 
     return {
       text,
@@ -135,31 +193,45 @@ export class ContentResolver {
     const extracted = this.webProcessor.extractFromHtml(html, resolvedUrl);
     diagnostics.push(`HTML extracted: ${extracted.text.length} chars, title="${extracted.title}"`);
 
-    // Try PDF link from HTML page
-    const pdfLink = this.webProcessor.findBestPdfLink(extracted);
-    if (pdfLink) {
-      diagnostics.push(`PDF link found: ${pdfLink.text} → ${pdfLink.href}`);
-      const pdfResult = await this.tryPdfDownload(pdfLink.href, diagnostics);
-      if (pdfResult) {
-        const text = this.truncateText(pdfResult.text, diagnostics);
-        return {
-          text,
-          contentType: "text/plain",
-          source: "pdf",
-          title: extracted.title || pdfResult.metadata.title || "",
-          resolvedUrl,
-          metadata: {
-            doi: extracted.metadata.doi || undefined,
-            citationPdfUrl: extracted.metadata.citationPdfUrl || undefined,
-            description: extracted.metadata.description || undefined,
-          },
-          diagnostics,
-        };
+    // Quality gate: if HTML has proper heading structure, prefer it over PDF.
+    // HTML heading tags (h1-h6) become markdown prefixes (## Section) which
+    // preserve hierarchy that flat PDF text loses. This naturally distinguishes
+    // structured-abstract inline headers from full paper section headings.
+    const mdHeadingCount = (extracted.text.match(/^#{1,3}\s+.+$/gm) || []).length;
+    const htmlHasStructure = mdHeadingCount >= 3 && extracted.text.length > 5000;
+    diagnostics.push(`HTML heading structure: ${mdHeadingCount} markdown headings, structured=${htmlHasStructure}`);
+
+    if (htmlHasStructure) {
+      diagnostics.push(`Using structured HTML (${mdHeadingCount} headings) — skipping PDF download`);
+    }
+
+    // Try PDF link from HTML page only if HTML lacks heading structure
+    if (!htmlHasStructure) {
+      const pdfLink = this.webProcessor.findBestPdfLink(extracted);
+      if (pdfLink) {
+        diagnostics.push(`PDF link found: ${pdfLink.text} → ${pdfLink.href}`);
+        const pdfResult = await this.tryPdfDownload(pdfLink.href, diagnostics);
+        if (pdfResult) {
+          const text = this.truncateText(pdfResult.text, diagnostics);
+          return {
+            text,
+            contentType: "text/plain",
+            source: "pdf",
+            title: extracted.title || pdfResult.metadata.title || "",
+            resolvedUrl,
+            metadata: {
+              doi: extracted.metadata.doi || undefined,
+              citationPdfUrl: extracted.metadata.citationPdfUrl || undefined,
+              description: extracted.metadata.description || undefined,
+            },
+            diagnostics,
+          };
+        }
       }
     }
 
-    // Fall back to HTML extracted text
-    diagnostics.push(`Falling back to HTML extracted text (${extracted.text.length} chars)`);
+    // Use HTML extracted text (either preferred or fallback)
+    diagnostics.push(`Using HTML extracted text (${extracted.text.length} chars)`);
     const text = this.truncateText(extracted.text, diagnostics);
 
     return {
@@ -268,8 +340,12 @@ export class ContentResolver {
       }
 
       const result = await this.pdfExtractor.extract(bytes);
-      diagnostics.push(`PDF extracted: ${result.pageCount} pages, ${result.text.length} chars`);
-      return { text: result.text, metadata: result.metadata };
+      const normalized = normalizePdfText(result.text);
+      if (normalized !== result.text) {
+        diagnostics.push(`PDF text normalized: ${result.text.split("\n").length} → ${normalized.split("\n").length} lines`);
+      }
+      diagnostics.push(`PDF extracted: ${result.pageCount} pages, ${normalized.length} chars`);
+      return { text: normalized, metadata: result.metadata };
     } catch (err) {
       diagnostics.push(`PDF download error: ${err instanceof Error ? err.message : String(err)}`);
       return null;
