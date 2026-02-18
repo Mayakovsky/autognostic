@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { WebPageProcessor } from "../src/services/WebPageProcessor";
+import { WebPageProcessor, stripPublisherChrome } from "../src/services/WebPageProcessor";
 
 describe("WebPageProcessor", () => {
   const processor = new WebPageProcessor();
@@ -310,5 +310,215 @@ describe("WebPageProcessor", () => {
       // Max is 500K — extracted text should be at most that
       expect(result.text.length).toBeLessThanOrEqual(500_000);
     });
+  });
+});
+
+describe("stripPublisherChrome", () => {
+  it("removes 'Similar content being viewed by others' recommendation block", () => {
+    const text = [
+      "## Abstract",
+      "",
+      "This paper presents important findings.",
+      "",
+      "### Similar content being viewed by others",
+      "",
+      "### Some Related Paper Title",
+      "",
+      "Article",
+      "",
+      " 01 June 2023",
+      "",
+      "### Another Related Paper",
+      "",
+      "Chapter",
+      "",
+      " © 2023",
+      "",
+      "## Introduction",
+      "",
+      "The introduction begins here.",
+    ].join("\n");
+
+    const result = stripPublisherChrome(text);
+    expect(result).toContain("This paper presents important findings.");
+    expect(result).toContain("## Introduction");
+    expect(result).toContain("The introduction begins here.");
+    expect(result).not.toContain("Similar content");
+    expect(result).not.toContain("Some Related Paper Title");
+    expect(result).not.toContain("Another Related Paper");
+  });
+
+  it("removes 'Related articles' recommendation block", () => {
+    const text = [
+      "## Methods",
+      "",
+      "We used statistical analysis.",
+      "",
+      "### Related articles",
+      "",
+      "### Paper A",
+      "",
+      "### Paper B",
+      "",
+      "## Results",
+      "",
+      "The results show improvement.",
+    ].join("\n");
+
+    const result = stripPublisherChrome(text);
+    expect(result).toContain("We used statistical analysis.");
+    expect(result).toContain("## Results");
+    expect(result).not.toContain("Related articles");
+    expect(result).not.toContain("Paper A");
+  });
+
+  it("removes post-article metadata sections", () => {
+    const text = [
+      "## Conclusion",
+      "",
+      "In summary, our findings confirm the hypothesis.",
+      "",
+      "## References",
+      "",
+      "1. Smith et al., 2020.",
+      "",
+      "## Author information",
+      "",
+      "### Authors and Affiliations",
+      "",
+      "- University of Example, City, Country",
+      "",
+      "John Doe & Jane Smith",
+      "",
+      "## Rights and permissions",
+      "",
+      "Open Access under Creative Commons License.",
+      "",
+      "## About this article",
+      "",
+      "### Cite this article",
+      "",
+      "Doe, J. Example Paper. Journal 1, 1-10 (2024).",
+    ].join("\n");
+
+    const result = stripPublisherChrome(text);
+    expect(result).toContain("In summary, our findings confirm the hypothesis.");
+    expect(result).toContain("## References");
+    expect(result).toContain("Smith et al.");
+    expect(result).not.toContain("Author information");
+    expect(result).not.toContain("University of Example");
+    expect(result).not.toContain("Rights and permissions");
+    expect(result).not.toContain("Creative Commons");
+    expect(result).not.toContain("About this article");
+    expect(result).not.toContain("Cite this article");
+  });
+
+  it("removes standalone navigation text lines", () => {
+    const text = [
+      "Submit manuscript",
+      "",
+      "# Paper Title",
+      "",
+      "Download PDF",
+      "",
+      "## Abstract",
+      "",
+      "Content here.",
+      "",
+      "Full size table",
+      "",
+      "More content.",
+      "",
+      "Full size image",
+      "",
+      "View author publications",
+    ].join("\n");
+
+    const result = stripPublisherChrome(text);
+    expect(result).toContain("# Paper Title");
+    expect(result).toContain("Content here.");
+    expect(result).toContain("More content.");
+    expect(result).not.toContain("Submit manuscript");
+    expect(result).not.toContain("Download PDF");
+    expect(result).not.toContain("Full size table");
+    expect(result).not.toContain("Full size image");
+    expect(result).not.toContain("View author publications");
+  });
+
+  it("preserves non-publisher content with similar-looking headings", () => {
+    const text = [
+      "## About this project",
+      "",
+      "This project aims to solve X.",
+      "",
+      "## Related work",
+      "",
+      "Previous studies have shown Y.",
+    ].join("\n");
+
+    const result = stripPublisherChrome(text);
+    // "About this project" is NOT "About this article" — should be preserved
+    expect(result).toContain("About this project");
+    expect(result).toContain("This project aims to solve X.");
+    // "Related work" is NOT "Related articles" — should be preserved
+    expect(result).toContain("Related work");
+    expect(result).toContain("Previous studies have shown Y.");
+  });
+
+  it("does not produce triple newlines after stripping", () => {
+    const text = [
+      "## Abstract",
+      "",
+      "Content.",
+      "",
+      "### Similar content being viewed by others",
+      "",
+      "### Junk paper",
+      "",
+      "## Introduction",
+      "",
+      "Real content.",
+    ].join("\n");
+
+    const result = stripPublisherChrome(text);
+    expect(result).not.toMatch(/\n{3,}/);
+  });
+
+  it("integrates into extractFromHtml pipeline", () => {
+    const processor = new WebPageProcessor();
+    const html = `<html><body>
+      <article>
+        <h2>Abstract</h2>
+        <p>Important research findings about bibliometrics.</p>
+        <div class="c-article-recommendations">
+          <h3>Similar content being viewed by others</h3>
+          <h3>Unrelated Paper About Something</h3>
+          <p>Article</p>
+          <p>01 June 2023</p>
+        </div>
+        <h2>Introduction</h2>
+        <p>The field of bibliometrics has grown substantially.</p>
+        <h2>Conclusion</h2>
+        <p>Our results support the hypothesis.</p>
+        <h2>Author information</h2>
+        <h3>Authors and Affiliations</h3>
+        <p>University of Somewhere</p>
+        <h2>Rights and permissions</h2>
+        <p>Licensed under CC BY 4.0</p>
+      </article>
+    </body></html>`;
+
+    const result = processor.extractFromHtml(html, "https://link.springer.com/article/test");
+    expect(result.text).toContain("Important research findings");
+    expect(result.text).toContain("## Introduction");
+    expect(result.text).toContain("bibliometrics has grown");
+    expect(result.text).toContain("## Conclusion");
+    expect(result.text).toContain("support the hypothesis");
+    expect(result.text).not.toContain("Similar content");
+    expect(result.text).not.toContain("Unrelated Paper");
+    expect(result.text).not.toContain("Author information");
+    expect(result.text).not.toContain("University of Somewhere");
+    expect(result.text).not.toContain("Rights and permissions");
+    expect(result.text).not.toContain("CC BY 4.0");
   });
 });

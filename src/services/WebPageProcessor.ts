@@ -273,6 +273,62 @@ function cleanExtractedText(raw: string): string {
     .trim();
 }
 
+/**
+ * Strip common publisher page chrome from extracted markdown text.
+ * Targets three noise categories:
+ * 1. Recommendation widgets ("Similar content", "Related articles")
+ * 2. Post-article metadata sections (Author info, Rights, About this article)
+ * 3. Standalone navigation/action text ("Download PDF", "Full size image")
+ */
+export function stripPublisherChrome(text: string): string {
+  let result = text;
+
+  // 1. Recommendation widgets — block from heading to next ## section
+  //    Springer: "### Similar content being viewed by others"
+  //    Elsevier/Wiley/Nature: "Related articles", "Recommended articles", etc.
+  result = result.replace(
+    /\n###? Similar content being viewed by others\n[\s\S]*?(?=\n## )/gi,
+    "\n"
+  );
+  result = result.replace(
+    /\n###? (?:Related articles?|Recommended articles?|You might also like|Explore related|Related content)\n[\s\S]*?(?=\n## )/gi,
+    "\n"
+  );
+
+  // 2. Post-article metadata sections — from heading to next ## heading or end
+  const metadataSections = [
+    "Author information",
+    "Rights and permissions",
+    "About this article",
+    "Additional information",
+    "Supplementary information",
+    "Ethics declarations",
+  ];
+  for (const section of metadataSections) {
+    const re = new RegExp(
+      `\\n##+ ${section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n[\\s\\S]*?(?=\\n## |$)`,
+      "gi"
+    );
+    result = result.replace(re, "\n");
+  }
+
+  // 3. Standalone navigation/action text lines
+  result = result.replace(/^\s*Submit manuscript\s*$/gm, "");
+  result = result.replace(/^\s*Download PDF\s*$/gm, "");
+  result = result.replace(/^\s*Download citation\s*$/gm, "");
+  result = result.replace(/^\s*Download references\s*$/gm, "");
+  result = result.replace(/^\s*Reprints and permissions\s*$/gm, "");
+  result = result.replace(/^\s*View author publications\s*$/gm, "");
+  result = result.replace(/^\s*Search author on:.*$/gm, "");
+  result = result.replace(/^\s*Full size (?:table|image)\s*$/gm, "");
+  result = result.replace(/^\s*Open in new window\s*$/gm, "");
+  result = result.replace(/^\s*Correspondence to\s*$/gm, "");
+  result = result.replace(/^\s*Aims and scope\s*$/gm, "");
+
+  // Collapse resulting multiple blank lines
+  return result.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export class WebPageProcessor {
   extractFromHtml(html: string, baseUrl: string): ExtractedPage {
     const { document } = parseHTML(html);
@@ -333,7 +389,8 @@ export class WebPageProcessor {
 
     // Walk DOM tree and convert to structured text
     const rawText = domToText(contentRoot);
-    const text = cleanExtractedText(rawText);
+    const cleaned = cleanExtractedText(rawText);
+    const text = stripPublisherChrome(cleaned);
 
     // Extract links (re-parse since we may have removed elements)
     // Use the full document for link extraction, not just content root

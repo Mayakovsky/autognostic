@@ -1,5 +1,5 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-18 15:55 (local)
+> Last updated: 2026-02-18 16:07 (local)
 > Updated by: Claude Opus 4.6 — JUNK_CLASS_PATTERN fix + Springer e2e test
 > Session label: Fix WebPageProcessor junk class false positive on layout utility classes
 > Staleness gate: 2026-02-18 — if today is >3 days past this,
@@ -69,11 +69,11 @@ All 6 workstreams completed in order. 309 tests pass (272 original + 37 new). Ze
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-18 | Mayakovsky | Add post-extraction pass to strip publisher page chrome | 6c9e301 |
 | 2026-02-18 | Mayakovsky | Fix JUNK_CLASS_PATTERN false positive on layout utility clas | dbeac77 |
 | 2026-02-18 | Claude Opus 4.6 | Fix JUNK_CLASS_PATTERN false positive + Springer e2e test passes | pending |
 | 2026-02-18 | Mayakovsky | Grant blanket read permissions in CLAUDE.md | 9be67da |
 | 2026-02-18 | Mayakovsky | Update stale CLAUDE.md to match Phase 3 project state | 0744e3b |
-| 2026-02-18 | Claude Opus 4.6 | Updated stale CLAUDE.md to match Phase 3 state (architecture, services, tests, guardrails) | no commit |
 
 ## Guardrails (DO / DON'T)
 DO:
