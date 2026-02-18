@@ -445,5 +445,34 @@ describe("ContentResolver", () => {
       // Should have broken some sentence boundaries
       expect(result.split("\n").length).toBeGreaterThan(1);
     });
+
+    it("splits numbered section headers (e.g., '7 Conclusion')", () => {
+      const flat =
+        "We trained on the WSJ training set of 40K sentences. " +
+        "7 Conclusion In this work, we presented the Transformer. " +
+        "8 References [1] Jimmy Lei Ba.";
+      const result = normalizePdfText(flat);
+      expect(result).toContain("\n\n7 Conclusion\n");
+      expect(result).toContain("\n\n8 References\n");
+    });
+
+    it("splits numbered section headers with subsection numbers", () => {
+      const flat =
+        "The architecture is described below. " +
+        "3.1 Introduction We propose a novel approach. " +
+        "3.2 Methods We conducted experiments.";
+      const result = normalizePdfText(flat);
+      expect(result).toContain("\n\n3.1 Introduction\n");
+      expect(result).toContain("\n\n3.2 Methods\n");
+    });
+
+    it("splits Abstract after email/text without punctuation", () => {
+      const flat =
+        "Ashish Vaswani Google Brain avaswani@google.com Illia Polosukhin illia.polosukhin@gmail.com " +
+        "Abstract The dominant sequence transduction models are based on complex recurrent neural networks. " +
+        "1 Introduction Recurrent neural networks have been established.";
+      const result = normalizePdfText(flat);
+      expect(result).toContain("\n\nAbstract\n");
+    });
   });
 });

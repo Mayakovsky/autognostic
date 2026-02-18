@@ -71,8 +71,17 @@ export function normalizePdfText(text: string): string {
   result = result.replace(afterPuncRe, "$1\n\n$2\n");
 
   // Pattern 3: Standalone "Abstract" often appears without punctuation before it
-  // (e.g., "Author Name 1,2 Abstract Background:")
-  result = result.replace(/(\d[,*]?\s+)(Abstract)\s/gi, "$1\n\n$2\n");
+  // (e.g., "Author Name 1,2 Abstract Background:" or "user@email.com Abstract The...")
+  result = result.replace(/(\S)\s+(Abstract)\s(?=[A-Z])/gi, "$1\n\n$2\n");
+
+  // Pattern 4: Numbered section headers after punctuation
+  // (e.g., "...40K sentences. 7 Conclusion In this..." or "...GPUs. 2 Background The...")
+  // The section number sits between punctuation and section name
+  const numberedRe = new RegExp(
+    `([.!?])\\s+(\\d{1,2}(?:\\.\\d{1,2})?)\\s+(${SECTION_NAMES_RE})\\s`,
+    "gi"
+  );
+  result = result.replace(numberedRe, "$1\n\n$2 $3\n");
 
   // Step 2: If text is still very flat (>2000 chars per line average),
   // break on sentence-ending period followed by capital letter
