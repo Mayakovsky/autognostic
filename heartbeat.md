@@ -1,7 +1,7 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-18 13:16 (local)
-> Updated by: Claude Opus 4.6 — CLAUDE.md sync
-> Session label: Updated stale CLAUDE.md to match current project state
+> Last updated: 2026-02-18 15:55 (local)
+> Updated by: Claude Opus 4.6 — JUNK_CLASS_PATTERN fix + Springer e2e test
+> Session label: Fix WebPageProcessor junk class false positive on layout utility classes
 > Staleness gate: 2026-02-18 — if today is >3 days past this,
 >   verify state before acting (see Section 3 of SeshMem schema).
 
@@ -12,7 +12,7 @@
 
 ## What Works (verified)
 - ✅ Build (`bun run build`) — 0 errors — verified 2026-02-18
-- ✅ Tests (`npx vitest run`) — 306/306 pass across 17 test files — verified 2026-02-18
+- ✅ Tests (`npx vitest run`) — 309/309 pass across 17 test files — verified 2026-02-18
 - ✅ Build canary: plugin logs `Phase 3, built <timestamp>` on startup — verified 2026-02-17
 - ✅ ContentResolver: unified URL→text pipeline, routes on response content-type — verified 2026-02-17
 - ✅ PDF magic byte verification: dual gate (content-type + %PDF header) — verified 2026-02-17
@@ -22,6 +22,8 @@
 - ✅ Accept header strategy: PDF-first for academic publisher URLs — verified 2026-02-17
 - ✅ mirrorDocToKnowledge simplified: uses ContentResolver, ~180 lines deleted — verified 2026-02-17
 - ✅ WebPageProcessor hardening: publisher selectors, reference whitelist, 500K length guard — verified 2026-02-17
+- ✅ WebPageProcessor: JUNK_CLASS_PATTERN uses token-aware matching (layout modifiers like `l-with-sidebar` no longer false-positive) — verified 2026-02-18
+- ✅ Springer URL e2e: 43,857 chars extracted, 29 markdown headings, section queries work (abstract, conclusion) — verified 2026-02-18
 - ✅ Diagnostic logging: logger.child() in mirrorDocToKnowledge, diagnostics array in ContentResolver — verified 2026-02-17
 - ✅ GrammarEngine: phrase/clause detection on-demand from sentences — verified 2026-02-16
 - ✅ WebPageProcessor: HTML→text extraction via linkedom, PDF link discovery — verified 2026-02-16
@@ -40,13 +42,13 @@
 - ✅ Provider inventory shows word/sentence/paragraph counts + section capabilities — verified 2026-02-16
 
 ## What's Broken
-- 🟢 ~~Springer URL ingestion produces garbage text~~ — FIXED: ContentResolver routes on content-type, WebPageProcessor hardened with publisher selectors
+- 🟢 ~~Springer URL ingestion produces garbage text~~ — FIXED: JUNK_CLASS_PATTERN false positive on `l-with-sidebar` stripped 54K-char content div; replaced regex `\b` with token-aware segment matching
 - 🟢 ~~mirrorDocToKnowledge has duplicated pipeline~~ — FIXED: rewritten to use ContentResolver (~180 lines deleted)
 - 🟢 ~~URL routing uses file extension instead of response content-type~~ — FIXED: ContentResolver routes on response content-type exclusively
 - 🟢 ~~PDF paywall detection relies only on content-type header~~ — FIXED: dual gate requires both content-type AND %PDF magic bytes
 
 ## Phase 3 Execution Summary
-All 6 workstreams completed in order. 306 tests pass (272 original + 34 new). Zero regressions.
+All 6 workstreams completed in order. 309 tests pass (272 original + 37 new). Zero regressions.
 
 | WS | Commit | Description |
 |----|--------|-------------|
@@ -60,18 +62,18 @@ All 6 workstreams completed in order. 306 tests pass (272 original + 34 new). Ze
 ## Next Actions (ordered)
 1. ~~Rebuild agent and test live~~ — DONE
 2. ~~Start agent, verify build canary~~ — DONE (2026-02-18T01:09:31Z)
-3. **Test Springer URL end-to-end** — HTML quality gate should route to structured HTML, sections should be individually queryable
+3. ~~Test Springer URL end-to-end~~ — DONE: 43,857 chars, 29 headings, abstract + conclusion queries work
 4. Test arXiv URL → PDF extraction in live agent
 5. Verify GET_EXACT_QUOTE returns correct individual sections (not merged)
 
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-18 | Mayakovsky | Fix JUNK_CLASS_PATTERN false positive on layout utility clas | dbeac77 |
+| 2026-02-18 | Claude Opus 4.6 | Fix JUNK_CLASS_PATTERN false positive + Springer e2e test passes | pending |
 | 2026-02-18 | Mayakovsky | Grant blanket read permissions in CLAUDE.md | 9be67da |
 | 2026-02-18 | Mayakovsky | Update stale CLAUDE.md to match Phase 3 project state | 0744e3b |
 | 2026-02-18 | Claude Opus 4.6 | Updated stale CLAUDE.md to match Phase 3 state (architecture, services, tests, guardrails) | no commit |
-| 2026-02-17 | Mayakovsky | HTML quality gate: prefer structured HTML over flat PDF for  | 8a0af02 |
-| 2026-02-18 | Mayakovsky | HTML quality gate, normalizePdfText fixes, singular CANONICAL mappings | pending |
 
 ## Guardrails (DO / DON'T)
 DO:

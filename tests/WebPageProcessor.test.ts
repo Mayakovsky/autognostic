@@ -223,6 +223,52 @@ describe("WebPageProcessor", () => {
     });
   });
 
+  describe("hardening — layout modifier classes preserved", () => {
+    it("does NOT strip content wrapped in layout utility class l-with-sidebar", () => {
+      const html = `<html><body>
+        <div class="c-article-main u-container l-with-sidebar">
+          <article>
+            <h1>Study Title</h1>
+            <h2>Abstract</h2>
+            <p>This study investigates important findings.</p>
+            <h2>Introduction</h2>
+            <p>Background information about the topic.</p>
+            <h2>Methods</h2>
+            <p>We used systematic review methodology.</p>
+          </article>
+        </div>
+      </body></html>`;
+      const result = processor.extractFromHtml(html, "https://link.springer.com/article/test");
+      expect(result.text).toContain("Study Title");
+      expect(result.text).toContain("Abstract");
+      expect(result.text).toContain("important findings");
+      expect(result.text).toContain("Introduction");
+      expect(result.text).toContain("Methods");
+    });
+
+    it("does NOT strip content wrapped in has-sidebar class", () => {
+      const html = `<html><body>
+        <div class="content-wrapper has-sidebar">
+          <article><p>Important article text.</p></article>
+        </div>
+      </body></html>`;
+      const result = processor.extractFromHtml(html, "https://example.com");
+      expect(result.text).toContain("Important article text");
+    });
+
+    it("still strips actual sidebar elements", () => {
+      const html = `<html><body>
+        <div class="sidebar">Sidebar junk</div>
+        <div class="page-sidebar">More sidebar junk</div>
+        <article><p>Real content.</p></article>
+      </body></html>`;
+      const result = processor.extractFromHtml(html, "https://example.com");
+      expect(result.text).toContain("Real content");
+      expect(result.text).not.toContain("Sidebar junk");
+      expect(result.text).not.toContain("More sidebar junk");
+    });
+  });
+
   describe("hardening — publisher selectors", () => {
     it("extracts content from class='c-article-body' when no <article> tag", () => {
       const html = `<html><body>

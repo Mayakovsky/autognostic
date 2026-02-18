@@ -34,8 +34,59 @@ const REMOVE_TAGS = new Set([
   "noscript", "iframe", "svg", "form",
 ]);
 
-/** Tags whose class/id patterns indicate non-content (ads, nav, social, etc.) */
-const JUNK_CLASS_PATTERN = /\b(nav|menu|sidebar|footer|cookie|banner|ad-|ads-|advert|popup|modal|social|share|comment|related|recommended|newsletter|signup|promo)\b/i;
+/**
+ * Junk class keywords — non-content regions when they appear as meaningful
+ * segments in CSS class names (hyphen-separated).
+ */
+const JUNK_KEYWORDS = new Set([
+  "nav", "menu", "sidebar", "footer", "cookie", "banner",
+  "ad", "ads", "advert", "popup", "modal", "social", "share",
+  "comment", "comments", "related", "recommended", "newsletter",
+  "signup", "promo",
+]);
+
+/**
+ * Layout/utility modifier segments that precede a junk keyword without
+ * indicating the element IS that junk type.
+ * e.g., "l-with-sidebar" = layout that HAS a sidebar, not a sidebar itself.
+ */
+const LAYOUT_MODIFIER_SEGMENTS = new Set([
+  "l", "layout", "with", "has", "no", "is", "not", "u", "js",
+]);
+
+/**
+ * Check if a single CSS class token (no spaces) is a junk class.
+ * Splits on hyphens and checks if any segment is a junk keyword,
+ * but skips matches preceded by layout modifier segments.
+ *
+ * Examples:
+ *   "sidebar"         → true  (direct junk keyword)
+ *   "sidebar-widget"  → true  (starts with junk keyword)
+ *   "ad-container"    → true  (starts with junk keyword)
+ *   "l-with-sidebar"  → false (preceded by layout modifier "with")
+ *   "has-sidebar"     → false (preceded by layout modifier "has")
+ *   "page-sidebar"    → true  ("page" is not a layout modifier)
+ */
+function isJunkToken(token: string): boolean {
+  const segments = token.toLowerCase().split("-");
+  for (let i = 0; i < segments.length; i++) {
+    if (JUNK_KEYWORDS.has(segments[i])) {
+      if (i > 0 && LAYOUT_MODIFIER_SEGMENTS.has(segments[i - 1])) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Check if a class or id attribute string contains a junk CSS class.
+ * Splits on whitespace and tests each class token individually.
+ * Treats hyphens as part of class names (unlike \b regex boundary).
+ */
+function hasJunkClass(classOrId: string): boolean {
+  if (!classOrId) return false;
+  return classOrId.trim().split(/\s+/).some(isJunkToken);
+}
 
 /** Pattern matching reference/bibliography sections — should NOT be removed by junk filter */
 const REFERENCE_SECTION_PATTERN = /\breferences?\b|\bbibliography\b|\bcitations?\b/i;
@@ -98,7 +149,7 @@ function domToText(node: any): string {
   // Skip elements with junk class/id patterns (but preserve reference sections)
   const className = node.getAttribute?.("class") || "";
   const id = node.getAttribute?.("id") || "";
-  if (JUNK_CLASS_PATTERN.test(className) || JUNK_CLASS_PATTERN.test(id)) {
+  if (hasJunkClass(className) || hasJunkClass(id)) {
     if (!REFERENCE_SECTION_PATTERN.test(className) && !REFERENCE_SECTION_PATTERN.test(id)) {
       return "";
     }
@@ -260,7 +311,7 @@ export class WebPageProcessor {
     for (const el of allElements) {
       const cn = (el as Element).getAttribute?.("class") || "";
       const elId = (el as Element).getAttribute?.("id") || "";
-      if (JUNK_CLASS_PATTERN.test(cn) || JUNK_CLASS_PATTERN.test(elId)) {
+      if (hasJunkClass(cn) || hasJunkClass(elId)) {
         // Don't remove reference sections
         if (REFERENCE_SECTION_PATTERN.test(cn) || REFERENCE_SECTION_PATTERN.test(elId)) {
           continue;
