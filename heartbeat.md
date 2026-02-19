@@ -1,8 +1,8 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-18 18:48 (local)
-> Updated by: Claude Opus 4.6 — API research + Phase 4 roadmap
-> Session label: Research scientific clearinghouse APIs, plan Phase 4 discovery layer
-> Staleness gate: 2026-02-18 — if today is >3 days past this,
+> Last updated: 2026-02-19 14:46 (local)
+> Updated by: Claude Opus 4.6 — GET_EXACT_QUOTE section isolation verification
+> Session label: Verify quote isolation, fix validate regex, run e2e verification
+> Staleness gate: 2026-02-19 — if today is >3 days past this,
 >   verify state before acting (see Section 3 of SeshMem schema).
 
 ## Focus (1-3 goals, testable)
@@ -12,8 +12,8 @@
 - [ ] **Phase 4: Discovery layer** — Unpaywall OA resolver, Semantic Scholar search, OpenAlex metadata (see research below)
 
 ## What Works (verified)
-- ✅ Build (`bun run build`) — 0 errors — verified 2026-02-18
-- ✅ Tests (`npx vitest run`) — 326/326 pass across 17 test files — verified 2026-02-18
+- ✅ Build (`bun run build`) — 0 errors — verified 2026-02-19
+- ✅ Tests (`npx vitest run`) — 326/326 pass across 17 test files — verified 2026-02-19
 - ✅ Build canary: plugin logs `Phase 3, built <timestamp>` on startup — verified 2026-02-17
 - ✅ ContentResolver: unified URL→text pipeline, routes on response content-type — verified 2026-02-17
 - ✅ PDF magic byte verification: dual gate (content-type + %PDF header) — verified 2026-02-17
@@ -42,6 +42,9 @@
 - ✅ Real agent (autognostic-agent/) loads plugin via `file:` dependency — verified 2026-02-12
 - ✅ Atlas character routes ADD_URL_TO_KNOWLEDGE correctly — verified 2026-02-12
 - ✅ GET_EXACT_QUOTE fires and returns document content — verified 2026-02-12
+- ✅ GET_EXACT_QUOTE section isolation: 8/8 e2e tests pass (abstract, conclusion, introduction, nonexistent section, nth, range, search, compound) — verified 2026-02-19
+- ✅ Validate regex: British spelling "acknowledgements" now matched via `acknowledg\w+` — verified 2026-02-19
+- ✅ Session API: messaging routes at `/api/messaging/sessions` — verified 2026-02-19
 - ✅ DocumentAnalyzer service: sentence/paragraph/line profiling — verified 2026-02-13
 - ✅ Profile stored at ingest via mirrorDocToKnowledge — verified 2026-02-13
 - ✅ Provider inventory shows word/sentence/paragraph counts + section capabilities — verified 2026-02-16
@@ -51,6 +54,7 @@
 - 🟢 ~~mirrorDocToKnowledge has duplicated pipeline~~ — FIXED: rewritten to use ContentResolver (~180 lines deleted)
 - 🟢 ~~URL routing uses file extension instead of response content-type~~ — FIXED: ContentResolver routes on response content-type exclusively
 - 🟢 ~~PDF paywall detection relies only on content-type header~~ — FIXED: dual gate requires both content-type AND %PDF magic bytes
+- 🟢 ~~Validate regex missed British "acknowledgements" spelling~~ — FIXED: `acknowledgments?` → `acknowledg\w+` in validate regex
 
 ## Phase 3 Execution Summary
 All 6 workstreams completed in order. 309 tests pass (272 original + 37 new). Zero regressions.
@@ -145,7 +149,7 @@ User: URL or DOI or search query
 - Low priority — PMC HTML pages already work via WebPageProcessor
 
 ### Non-API Next Steps (general hardening)
-- Verify GET_EXACT_QUOTE returns correct individual sections (not merged) — partially tested
+- ~~Verify GET_EXACT_QUOTE returns correct individual sections (not merged)~~ — DONE: 8/8 e2e pass
 - Test more diverse PDFs: double-column layouts, supplementary materials, non-English
 - Error UX: better messages when URL is paywalled or PDF extraction fails
 - Rate limiting / caching for repeated URL fetches
@@ -155,7 +159,7 @@ User: URL or DOI or search query
 2. ~~Start agent, verify build canary~~ — DONE (2026-02-18T01:09:31Z)
 3. ~~Test Springer URL end-to-end~~ — DONE: 43,857 chars, 29 headings, abstract + conclusion queries work
 4. ~~Test arXiv URL → PDF extraction in live agent~~ — DONE: 39,976 chars, 6 sections detected
-5. Verify GET_EXACT_QUOTE returns correct individual sections (not merged)
+5. ~~Verify GET_EXACT_QUOTE returns correct individual sections (not merged)~~ — DONE: 8/8 pass
 6. **Phase 4 WS-1: Unpaywall OA resolver** (DOI → free PDF URL)
 7. **Phase 4 WS-2: Semantic Scholar discovery** (FIND_RELATED_PAPERS action)
 8. **Phase 4 WS-3: OpenAlex search** (SEARCH_PAPERS action)
@@ -163,11 +167,11 @@ User: URL or DOI or search query
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-19 | Mayakovsky | Optimize GET_EXACT_QUOTE: single DB fetch, pure search funct | 630eb74 |
+| 2026-02-19 | Claude Opus 4.6 | Fix validate regex (British acknowledgements), verify 8/8 e2e | — |
 | 2026-02-18 | Mayakovsky | Add Phase 4 roadmap: discovery layer for scientific paper AP | b8b1cac |
 | 2026-02-18 | Claude Opus 4.6 | API research + Phase 4 roadmap in heartbeat | — |
 | 2026-02-18 | Mayakovsky | Fix arXiv PDF section detection + add summary/overview alias | 2b2e114 |
-| 2026-02-18 | Mayakovsky | Handle numbered section headers and Abstract after email in  | 73cb303 |
-| 2026-02-18 | Mayakovsky | Add post-extraction pass to strip publisher page chrome | 6c9e301 |
 
 ## Guardrails (DO / DON'T)
 DO:

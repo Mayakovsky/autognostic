@@ -1,5 +1,7 @@
-import type { IAgentRuntime } from "@elizaos/core";
-import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
+/**
+ * Pure search functions operating on document content strings.
+ * No DB access — caller provides content.
+ */
 
 export interface QuoteResult {
   found: boolean;
@@ -19,21 +21,11 @@ export interface QuoteAllResult {
   totalCount: number;
 }
 
-export async function getExactQuote(
-  runtime: IAgentRuntime,
-  url: string,
+/** Find first occurrence of searchText in content (case-insensitive). */
+export function getExactQuote(
+  content: string,
   searchText: string
-): Promise<QuoteResult> {
-  const content = await autognosticDocumentsRepository.getFullContent(
-    runtime,
-    url
-  );
-
-  if (!content) {
-    return { found: false };
-  }
-
-  // Case-insensitive search
+): QuoteResult {
   const contentLower = content.toLowerCase();
   const searchLower = searchText.toLowerCase();
   const position = contentLower.indexOf(searchLower);
@@ -61,27 +53,36 @@ export async function getExactQuote(
   };
 }
 
-export async function getExactQuoteAll(
-  runtime: IAgentRuntime,
-  url: string,
+/** Find all occurrences of searchText in content (case-insensitive).
+ *  Uses pre-computed newline offsets + binary search for O(n + m*log(L)) line lookup. */
+export function getExactQuoteAll(
+  content: string,
   searchText: string
-): Promise<QuoteAllResult> {
-  const content = await autognosticDocumentsRepository.getFullContent(
-    runtime,
-    url
-  );
-  if (!content) return { matches: [], totalCount: 0 };
-
+): QuoteAllResult {
   const contentLower = content.toLowerCase();
   const searchLower = searchText.toLowerCase();
   const matches: QuoteAllResult["matches"] = [];
-  let pos = 0;
 
+  // Pre-compute newline offsets for O(n+m) line lookup instead of O(n*m)
+  const newlineOffsets: number[] = [-1]; // sentinel: "line 1 starts after index -1"
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === "\n") newlineOffsets.push(i);
+  }
+
+  let pos = 0;
   while (pos < contentLower.length) {
     const idx = contentLower.indexOf(searchLower, pos);
     if (idx === -1) break;
 
-    const lineNumber = content.substring(0, idx).split("\n").length;
+    // Binary search for line number
+    let lo = 0, hi = newlineOffsets.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (newlineOffsets[mid] < idx) lo = mid;
+      else hi = mid - 1;
+    }
+    const lineNumber = lo + 1;
+
     const actualQuote = content.substring(idx, idx + searchText.length);
     const contextStart = Math.max(0, idx - 50);
     const contextEnd = Math.min(content.length, idx + searchText.length + 50);
@@ -96,33 +97,4 @@ export async function getExactQuoteAll(
   }
 
   return { matches, totalCount: matches.length };
-}
-
-export async function getLineContent(
-  runtime: IAgentRuntime,
-  url: string,
-  lineNumber: number
-): Promise<string | null> {
-  const content = await autognosticDocumentsRepository.getFullContent(
-    runtime,
-    url
-  );
-
-  if (!content) {
-    return null;
-  }
-
-  const lines = content.split("\n");
-  if (lineNumber < 1 || lineNumber > lines.length) {
-    return null;
-  }
-
-  return lines[lineNumber - 1];
-}
-
-export async function getFullDocument(
-  runtime: IAgentRuntime,
-  url: string
-): Promise<string | null> {
-  return autognosticDocumentsRepository.getFullContent(runtime, url);
 }

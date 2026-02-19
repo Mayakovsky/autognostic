@@ -101,7 +101,7 @@ export default autognosticPlugin;
 
 export { removeFromKnowledge, removeDocumentByUrl } from "./integration/removeFromKnowledge";
 export { getScheduledSyncService } from "./services/ScheduledSyncService";
-export { getExactQuote, getLineContent, getFullDocument } from "./integration/getExactQuote";
+export { getExactQuote, getExactQuoteAll } from "./integration/getExactQuote";
 
 // Scientific paper detection & classification
 export { 

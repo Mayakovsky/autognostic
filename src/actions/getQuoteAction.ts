@@ -1,5 +1,5 @@
 import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content } from "@elizaos/core";
-import { getExactQuote, getExactQuoteAll, getLineContent, getFullDocument } from "../integration/getExactQuote";
+import { getExactQuote, getExactQuoteAll } from "../integration/getExactQuote";
 import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
 import { analyzeDocument } from "../services/DocumentAnalyzer";
 import type { DocumentProfile } from "../services/DocumentAnalyzer.types";
@@ -27,25 +27,27 @@ async function getOrComputeProfile(
 /** Sentinel for open-ended ranges */
 const MAX_RANGE = 999999;
 
+/** Lookup tables for number parsing — hoisted to module level to avoid re-allocation */
+const CARDINALS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
+  sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
+  twenty: 20, thirty: 30, forty: 40, fifty: 50, hundred: 100,
+};
+const ORDINALS: Record<string, number> = {
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
+  sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+  eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15,
+  sixteenth: 16, seventeenth: 17, eighteenth: 18, nineteenth: 19,
+  twentieth: 20, thirtieth: 30,
+};
+
 /** Parse a number from cardinal words, ordinal words, ordinal suffixes, or digit strings */
 export function parseNumber(s: string): number {
-  const cardinals: Record<string, number> = {
-    one: 1, two: 2, three: 3, four: 4, five: 5,
-    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-    eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
-    sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
-    twenty: 20, thirty: 30, forty: 40, fifty: 50, hundred: 100,
-  };
-  const ordinals: Record<string, number> = {
-    first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
-    sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
-    eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15,
-    sixteenth: 16, seventeenth: 17, eighteenth: 18, nineteenth: 19,
-    twentieth: 20, thirtieth: 30,
-  };
   const lower = s.toLowerCase().trim();
-  if (cardinals[lower] !== undefined) return cardinals[lower];
-  if (ordinals[lower] !== undefined) return ordinals[lower];
+  if (CARDINALS[lower] !== undefined) return CARDINALS[lower];
+  if (ORDINALS[lower] !== undefined) return ORDINALS[lower];
   // Ordinal suffixes: 1st, 2nd, 3rd, 4th, ...
   const suffixMatch = lower.match(/^(\d+)(?:st|nd|rd|th)$/);
   if (suffixMatch) return parseInt(suffixMatch[1], 10);
@@ -73,6 +75,15 @@ const ORD_WORDS = "first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|te
 // Unit pattern (singular, captures without trailing s)
 const UNIT_PAT = "sentences?|paragraphs?|words?|lines?";
 const UNIT_SINGULAR = "sentence|paragraph|line|word";
+
+/** Pre-compiled regexes for inferMode — hoisted to module level to avoid per-call compilation */
+const LAST_N_RE = new RegExp(`\\blast\\s+(${NUM_WORDS})\\s+(${UNIT_PAT})\\b`, "i");
+const FIRST_N_RE = new RegExp(`\\bfirst\\s+(${NUM_WORDS})\\s+(${UNIT_PAT})\\b`, "i");
+const ORD_UNIT_RE = new RegExp(`\\b(${ORD_WORDS})\\s+(${UNIT_SINGULAR})\\b`, "i");
+const UNIT_NUM_RE = new RegExp(`\\b(${UNIT_SINGULAR})\\s+(${NUM_WORDS}|${ORD_WORDS})\\b`, "i");
+const SECTION_KW = /(abstract|summary|overview|introduction|background|methods?|methodology|results?|discussion|conclusions?|references?|bibliography|acknowledg\w*|appendix|supplementary|keywords?|literature)/i;
+const SECTION_MATCH_RE = new RegExp(`(?:show\\s+(?:me\\s+)?(?:the\\s+)?|read\\s+(?:the\\s+)?|what(?:'s|\\s+is)\\s+(?:in\\s+)?(?:the\\s+)?|(?:give|get)\\s+(?:me\\s+)?(?:the\\s+)?|the\\s+)(${SECTION_KW.source})(?:\\s+(?:section|part))?`, "i");
+const COMPOUND_RE = new RegExp(`\\b(${ORD_WORDS})\\s+and\\s+(${ORD_WORDS})\\s+(${UNIT_SINGULAR})s?\\b`, "i");
 
 /** Normalize a captured stat unit to its canonical form */
 function normalizeStatUnit(raw: string): string {
@@ -139,23 +150,20 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
   }
 
   // --- Priority 2: Last N units ---
-  const lastNRe = new RegExp(`\\blast\\s+(${NUM_WORDS})\\s+(${UNIT_PAT})\\b`, "i");
-  const lastNMatch = text.match(lastNRe);
+  const lastNMatch = text.match(LAST_N_RE);
   if (lastNMatch) {
     return { mode: "last_n", count: parseNumber(lastNMatch[1]), unit: lastNMatch[2].replace(/s$/, "") };
   }
 
   // --- Priority 3: First N units ---
-  const firstNRe = new RegExp(`\\bfirst\\s+(${NUM_WORDS})\\s+(${UNIT_PAT})\\b`, "i");
-  const firstNMatch = text.match(firstNRe);
+  const firstNMatch = text.match(FIRST_N_RE);
   if (firstNMatch) {
     return { mode: "first_n", count: parseNumber(firstNMatch[1]), unit: firstNMatch[2].replace(/s$/, "") };
   }
 
   // --- Priority 4: Ordinal + unit -> nth (e.g., "third paragraph", "5th sentence") ---
   // Exclude first/last — they have dedicated first_paragraph/last_paragraph modes
-  const ordUnitRe = new RegExp(`\\b(${ORD_WORDS})\\s+(${UNIT_SINGULAR})\\b`, "i");
-  const ordUnitMatch = text.match(ordUnitRe);
+  const ordUnitMatch = text.match(ORD_UNIT_RE);
   if (ordUnitMatch) {
     const ordLower = ordUnitMatch[1].toLowerCase();
     const unitLower = ordUnitMatch[2].toLowerCase();
@@ -168,8 +176,7 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
 
   // --- Priority 5: Unit + number -> nth (e.g., "paragraph three", "sentence 5") ---
   // Skip "paragraph \d+" and "line \d+" — they have dedicated modes (P6, P16)
-  const unitNumRe = new RegExp(`\\b(${UNIT_SINGULAR})\\s+(${NUM_WORDS}|${ORD_WORDS})\\b`, "i");
-  const unitNumMatch = text.match(unitNumRe);
+  const unitNumMatch = text.match(UNIT_NUM_RE);
   if (unitNumMatch) {
     const unit = unitNumMatch[1].toLowerCase();
     const numStr = unitNumMatch[2];
@@ -181,10 +188,7 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
   }
 
   // --- Priority 5.5: Section routing (before last_paragraph at P7) ---
-  const SECTION_KW = /(abstract|summary|overview|introduction|background|methods?|methodology|results?|discussion|conclusions?|references?|bibliography|acknowledg\w*|appendix|supplementary|keywords?|literature)/i;
-  const sectionMatch = text.match(
-    new RegExp(`(?:show\\s+(?:me\\s+)?(?:the\\s+)?|read\\s+(?:the\\s+)?|what(?:'s|\\s+is)\\s+(?:in\\s+)?(?:the\\s+)?|(?:give|get)\\s+(?:me\\s+)?(?:the\\s+)?|the\\s+)(${SECTION_KW.source})(?:\\s+(?:section|part))?`, "i")
-  );
+  const sectionMatch = text.match(SECTION_MATCH_RE);
   if (sectionMatch) {
     const name = normalizeSectionName(sectionMatch[1]);
     if (name) return { mode: "section", sectionName: name };
@@ -198,9 +202,7 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
   }
 
   // --- Priority 5.7: Compound requests — "first and third sentences" ---
-  const compoundMatch = text.match(
-    new RegExp(`\\b(${ORD_WORDS})\\s+and\\s+(${ORD_WORDS})\\s+(${UNIT_SINGULAR})s?\\b`, "i")
-  );
+  const compoundMatch = text.match(COMPOUND_RE);
   if (compoundMatch) {
     const n1 = parseNumber(compoundMatch[1]);
     const n2 = parseNumber(compoundMatch[2]);
@@ -407,7 +409,7 @@ export const GetQuoteAction: Action = {
     "'how many sentences', 'number of paragraphs', 'character count', 'total lines', " +
     "'lines 5 to 10', 'sentences 3 through 7', 'from line 5 to the end', " +
     "'how does it start', 'how does it end', 'the opening', " +
-    "'show me the abstract', 'the conclusion', 'read the methods', 'list sections', " +
+    "'show me the abstract', 'the conclusion', 'the acknowledgements', 'read the methods', 'list sections', " +
     "'first and third sentences', 'how many times does X appear', " +
     "'full document', 'read it all', 'the second line', '5th sentence', " +
     "'penultimate sentence', 'next to last paragraph', 'stats', 'overview'. " +
@@ -537,7 +539,7 @@ export const GetQuoteAction: Action = {
       lineNumber: { type: "number", description: "Line number to retrieve" },
       mode: {
         type: "string",
-        enum: ["search", "search_all", "line", "full", "last", "stats", "stat_specific", "last_n", "first_n", "nth", "paragraph", "first_paragraph", "last_paragraph", "range", "sentence_range", "paragraph_range", "implicit_start", "implicit_end", "section", "section_list", "compound"],
+        enum: ["search", "search_all", "line", "full", "stats", "stat_specific", "last_n", "first_n", "nth", "paragraph", "first_paragraph", "last_paragraph", "range", "sentence_range", "paragraph_range", "implicit_start", "implicit_end", "section", "section_list", "compound"],
         description: "Retrieval mode — includes section retrieval, section listing, and compound requests",
       },
     },
@@ -546,7 +548,7 @@ export const GetQuoteAction: Action = {
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
     const text = ((message.content as Content)?.text || "").toLowerCase();
-    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+(?:words?|sentences?|paragraphs?|lines?))|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full|paragraph)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document|last|first)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper)|how\s+many\s+(?:words?|lines?|sentences?|paragraphs?|characters?|chars?)|word\s+count|line\s+count|sentence\s+count|paragraph\s+count|character\s+count|statistics?|stats|paragraph\s+\d+|lines?\s+\d+\s+(?:to|through|thru)|(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|\d+(?:st|nd|rd|th))\s+(?:sentence|paragraph|line|word)|(?:sentence|paragraph|line)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|how\s+long\s+is|count\s+the\s+(?:words?|lines?|sentences?|paragraphs?|characters?)|length|number\s+of\s+(?:words?|lines?|sentences?|paragraphs?)|total\s+(?:words?|lines?|sentences?|paragraphs?)|(?:find|locate|search|look\s+for)|(?:is|does)\s+(?:it\s+)?(?:mention|discuss|reference|include)|(?:does\s+it\s+)?talk\s+about|every\s+(?:mention|occurrence|instance)\s+of|how\s+does\s+it\s+(?:start|begin|end)|(?:the\s+)?(?:opening|beginning|ending|conclusion)\s+of|(?:the\s+)?(?:abstract|summary|overview|introduction|methods?|results?|discussion|conclusions?|references?|acknowledgments?|bibliography)|list\s+(?:the\s+)?sections|table\s+of\s+contents|how\s+many\s+times|penultimate|next\s+to\s+last|(?:go|skip)\s+to\s+(?:line|paragraph)|read\s+it|tell\s+me\s+about\s+(?:the\s+)?(?:document|doc)|sentences?\s+\d+\s+(?:to|through|thru)|paragraphs?\s+\d+\s+(?:to|through|thru)|from\s+line|everything\s+after|para\s+\d+)/i.test(text);
+    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+(?:words?|sentences?|paragraphs?|lines?))|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full|paragraph)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document|last|first)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper)|how\s+many\s+(?:words?|lines?|sentences?|paragraphs?|characters?|chars?)|word\s+count|line\s+count|sentence\s+count|paragraph\s+count|character\s+count|statistics?|stats|paragraph\s+\d+|lines?\s+\d+\s+(?:to|through|thru)|(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|\d+(?:st|nd|rd|th))\s+(?:sentence|paragraph|line|word)|(?:sentence|paragraph|line)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|how\s+long\s+is|count\s+the\s+(?:words?|lines?|sentences?|paragraphs?|characters?)|length|number\s+of\s+(?:words?|lines?|sentences?|paragraphs?)|total\s+(?:words?|lines?|sentences?|paragraphs?)|(?:find|locate|search|look\s+for)|(?:is|does)\s+(?:it\s+)?(?:mention|discuss|reference|include)|(?:does\s+it\s+)?talk\s+about|every\s+(?:mention|occurrence|instance)\s+of|how\s+does\s+it\s+(?:start|begin|end)|(?:the\s+)?(?:opening|beginning|ending|conclusion)\s+of|(?:the\s+)?(?:abstract|summary|overview|introduction|methods?|results?|discussion|conclusions?|references?|acknowledg\w+|bibliography)|list\s+(?:the\s+)?sections|table\s+of\s+contents|how\s+many\s+times|penultimate|next\s+to\s+last|(?:go|skip)\s+to\s+(?:line|paragraph)|read\s+it|tell\s+me\s+about\s+(?:the\s+)?(?:document|doc)|sentences?\s+\d+\s+(?:to|through|thru)|paragraphs?\s+\d+\s+(?:to|through|thru)|from\s+line|everything\s+after|para\s+\d+)/i.test(text);
   },
 
   async handler(
@@ -593,66 +595,63 @@ export const GetQuoteAction: Action = {
         { error: "no_url" });
     }
 
+    // --- Single DB fetch for all modes ---
+    const data = await getOrComputeProfile(runtime, url);
+    if (!data) {
+      return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
+    }
+    const { profile, content } = data;
+
     // --- STAT_SPECIFIC mode: return just the one stat requested ---
     if (inferred.mode === "stat_specific") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
-      const p = data.profile;
       const unit = inferred.unit ?? "word";
       const filename = url.split("/").pop() || url;
 
       if (unit === "word") {
         return respond(callback, true,
-          `The document contains ${p.wordCount.toLocaleString()} words.`,
-          { url, wordCount: p.wordCount });
+          `The document contains ${profile.wordCount.toLocaleString()} words.`,
+          { url, wordCount: profile.wordCount });
       }
       if (unit === "line") {
         return respond(callback, true,
-          `The document contains ${p.lineCount.toLocaleString()} lines (${p.nonBlankLineCount} non-blank).`,
-          { url, lineCount: p.lineCount, nonBlankLineCount: p.nonBlankLineCount });
+          `The document contains ${profile.lineCount.toLocaleString()} lines (${profile.nonBlankLineCount} non-blank).`,
+          { url, lineCount: profile.lineCount, nonBlankLineCount: profile.nonBlankLineCount });
       }
       if (unit === "sentence") {
         return respond(callback, true,
-          `The document contains ${p.sentenceCount.toLocaleString()} sentences.`,
-          { url, sentenceCount: p.sentenceCount });
+          `The document contains ${profile.sentenceCount.toLocaleString()} sentences.`,
+          { url, sentenceCount: profile.sentenceCount });
       }
       if (unit === "paragraph") {
         return respond(callback, true,
-          `The document contains ${p.paragraphCount.toLocaleString()} paragraphs.`,
-          { url, paragraphCount: p.paragraphCount });
+          `The document contains ${profile.paragraphCount.toLocaleString()} paragraphs.`,
+          { url, paragraphCount: profile.paragraphCount });
       }
       if (unit === "character") {
         return respond(callback, true,
-          `The document contains ${p.charCount.toLocaleString()} characters.`,
-          { url, charCount: p.charCount });
+          `The document contains ${profile.charCount.toLocaleString()} characters.`,
+          { url, charCount: profile.charCount });
       }
       // Fallback for unknown unit — give full stats
-      const text = `Document stats for ${filename}: ${p.wordCount.toLocaleString()} words, ${p.sentenceCount.toLocaleString()} sentences, ${p.paragraphCount.toLocaleString()} paragraphs, ${p.lineCount.toLocaleString()} lines, ${p.charCount.toLocaleString()} characters.`;
+      const text = `Document stats for ${filename}: ${profile.wordCount.toLocaleString()} words, ${profile.sentenceCount.toLocaleString()} sentences, ${profile.paragraphCount.toLocaleString()} paragraphs, ${profile.lineCount.toLocaleString()} lines, ${profile.charCount.toLocaleString()} characters.`;
       return respond(callback, true, text, {
-        url, wordCount: p.wordCount, sentenceCount: p.sentenceCount,
-        paragraphCount: p.paragraphCount, lineCount: p.lineCount, charCount: p.charCount,
+        url, wordCount: profile.wordCount, sentenceCount: profile.sentenceCount,
+        paragraphCount: profile.paragraphCount, lineCount: profile.lineCount, charCount: profile.charCount,
       });
     }
 
     // --- STATS mode: full overview ---
     if (inferred.mode === "stats") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
-      const p = data.profile;
       const text = `Document stats for ${url.split("/").pop()}:\n` +
-        `- ${p.wordCount.toLocaleString()} words\n` +
-        `- ${p.sentenceCount.toLocaleString()} sentences\n` +
-        `- ${p.paragraphCount.toLocaleString()} paragraphs\n` +
-        `- ${p.lineCount.toLocaleString()} lines (${p.nonBlankLineCount} non-blank)\n` +
-        `- ${p.charCount.toLocaleString()} characters\n` +
-        `- Avg ${p.avgWordsPerSentence} words/sentence, ${p.avgSentencesPerParagraph} sentences/paragraph`;
+        `- ${profile.wordCount.toLocaleString()} words\n` +
+        `- ${profile.sentenceCount.toLocaleString()} sentences\n` +
+        `- ${profile.paragraphCount.toLocaleString()} paragraphs\n` +
+        `- ${profile.lineCount.toLocaleString()} lines (${profile.nonBlankLineCount} non-blank)\n` +
+        `- ${profile.charCount.toLocaleString()} characters\n` +
+        `- Avg ${profile.avgWordsPerSentence} words/sentence, ${profile.avgSentencesPerParagraph} sentences/paragraph`;
       return respond(callback, true, text, {
-        url, wordCount: p.wordCount, sentenceCount: p.sentenceCount,
-        paragraphCount: p.paragraphCount, lineCount: p.lineCount,
+        url, wordCount: profile.wordCount, sentenceCount: profile.sentenceCount,
+        paragraphCount: profile.paragraphCount, lineCount: profile.lineCount,
       });
     }
 
@@ -670,11 +669,6 @@ export const GetQuoteAction: Action = {
 
     // --- LAST_N / FIRST_N mode (sentences, paragraphs, words, lines) ---
     if (inferred.mode === "last_n" || inferred.mode === "first_n") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
-      const { profile, content } = data;
       const count = inferred.count ?? 1;
       const unit = inferred.unit ?? "sentence";
       const isLast = inferred.mode === "last_n";
@@ -731,84 +725,72 @@ export const GetQuoteAction: Action = {
 
     // --- PARAGRAPH mode ---
     if (inferred.mode === "paragraph") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
       const paraNum = (inferred.count ?? 1) - 1;
-      const para = data.profile.paragraphs[paraNum];
+      const para = profile.paragraphs[paraNum];
       if (!para) {
         return respond(callback, false,
-          `Paragraph ${paraNum + 1} not found. Document has ${data.profile.paragraphCount} paragraphs.`,
-          { error: "out_of_range", paragraphCount: data.profile.paragraphCount });
+          `Paragraph ${paraNum + 1} not found. Document has ${profile.paragraphCount} paragraphs.`,
+          { error: "out_of_range", paragraphCount: profile.paragraphCount });
       }
-      const paraText = data.content.substring(para.start, para.end);
+      const paraText = content.substring(para.start, para.end);
       const text = `Paragraph ${paraNum + 1} (lines ${para.lineStart}-${para.lineEnd}, ${para.wordCount} words):\n"${paraText}"`;
       return respond(callback, true, text, { url, paragraph: paraNum + 1, wordCount: para.wordCount });
     }
 
     // --- FIRST/LAST PARAGRAPH mode ---
     if (inferred.mode === "first_paragraph" || inferred.mode === "last_paragraph") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
       const isFirst = inferred.mode === "first_paragraph";
       const para = isFirst
-        ? data.profile.paragraphs[0]
-        : data.profile.paragraphs[data.profile.paragraphs.length - 1];
+        ? profile.paragraphs[0]
+        : profile.paragraphs[profile.paragraphs.length - 1];
       if (!para) {
         return respond(callback, false, "No paragraphs found in this document.", { error: "no_paragraphs" });
       }
       const label = isFirst ? "First" : "Last";
-      const paraText = data.content.substring(para.start, para.end);
+      const paraText = content.substring(para.start, para.end);
       const text = `${label} paragraph (lines ${para.lineStart}-${para.lineEnd}, ${para.wordCount} words):\n"${paraText}"`;
       return respond(callback, true, text, { url, paragraph: para.index + 1, wordCount: para.wordCount });
     }
 
     // --- NTH mode: specific Nth unit — every branch returns immediately ---
     if (inferred.mode === "nth") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
       const n = inferred.count ?? 1;
       const unit = inferred.unit ?? "sentence";
 
       if (unit === "sentence") {
-        const sentence = data.profile.sentences[n - 1];
+        const sentence = profile.sentences[n - 1];
         if (!sentence) {
           return respond(callback, false,
-            `Sentence ${n} not found. Document has ${data.profile.sentenceCount} sentences.`,
-            { error: "out_of_range", sentenceCount: data.profile.sentenceCount });
+            `Sentence ${n} not found. Document has ${profile.sentenceCount} sentences.`,
+            { error: "out_of_range", sentenceCount: profile.sentenceCount });
         }
         const text = `Sentence ${n} (line ${sentence.lineNumber}): "${sentence.text}"`;
         return respond(callback, true, text, { url, sentenceNumber: n, lineNumber: sentence.lineNumber });
       }
       if (unit === "paragraph") {
-        const para = data.profile.paragraphs[n - 1];
+        const para = profile.paragraphs[n - 1];
         if (!para) {
           return respond(callback, false,
-            `Paragraph ${n} not found. Document has ${data.profile.paragraphCount} paragraphs.`,
-            { error: "out_of_range", paragraphCount: data.profile.paragraphCount });
+            `Paragraph ${n} not found. Document has ${profile.paragraphCount} paragraphs.`,
+            { error: "out_of_range", paragraphCount: profile.paragraphCount });
         }
-        const paraText = data.content.substring(para.start, para.end);
+        const paraText = content.substring(para.start, para.end);
         const text = `Paragraph ${n} (lines ${para.lineStart}-${para.lineEnd}, ${para.wordCount} words):\n"${paraText}"`;
         return respond(callback, true, text, { url, paragraph: n, wordCount: para.wordCount });
       }
       if (unit === "line") {
-        const line = data.profile.lines[n - 1];
+        const line = profile.lines[n - 1];
         if (!line) {
           return respond(callback, false,
-            `Line ${n} not found. Document has ${data.profile.lineCount} lines.`,
-            { error: "out_of_range", lineCount: data.profile.lineCount });
+            `Line ${n} not found. Document has ${profile.lineCount} lines.`,
+            { error: "out_of_range", lineCount: profile.lineCount });
         }
-        const lineText = data.content.substring(line.start, line.end);
+        const lineText = content.substring(line.start, line.end);
         const text = `Line ${n}: "${lineText}"`;
         return respond(callback, true, text, { url, lineNumber: n, content: lineText });
       }
       if (unit === "word") {
-        const allWords = data.content.trim().split(/\s+/);
+        const allWords = content.trim().split(/\s+/);
         const word = allWords[n - 1];
         if (!word) {
           return respond(callback, false,
@@ -826,17 +808,13 @@ export const GetQuoteAction: Action = {
 
     // --- SENTENCE_RANGE mode ---
     if (inferred.mode === "sentence_range") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
       const start = (inferred.lineNumber ?? 1) - 1;
       const end = (inferred.lineEnd ?? start + 1) - 1;
-      const items = data.profile.sentences.slice(start, end + 1);
+      const items = profile.sentences.slice(start, end + 1);
       if (items.length === 0) {
         return respond(callback, false,
-          `Sentences ${start + 1}-${end + 1} not found. Document has ${data.profile.sentenceCount} sentences.`,
-          { error: "out_of_range", sentenceCount: data.profile.sentenceCount });
+          `Sentences ${start + 1}-${end + 1} not found. Document has ${profile.sentenceCount} sentences.`,
+          { error: "out_of_range", sentenceCount: profile.sentenceCount });
       }
       const formatted = items.map((s) =>
         `${s.index + 1}. "${s.text}" (line ${s.lineNumber})`
@@ -847,23 +825,19 @@ export const GetQuoteAction: Action = {
 
     // --- PARAGRAPH_RANGE mode ---
     if (inferred.mode === "paragraph_range") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
       const start = (inferred.lineNumber ?? 1) - 1;
       const actualEnd = Math.min(
-        (inferred.lineEnd ?? data.profile.paragraphCount) - 1,
-        data.profile.paragraphCount - 1
+        (inferred.lineEnd ?? profile.paragraphCount) - 1,
+        profile.paragraphCount - 1
       );
-      const items = data.profile.paragraphs.slice(start, actualEnd + 1);
+      const items = profile.paragraphs.slice(start, actualEnd + 1);
       if (items.length === 0) {
         return respond(callback, false,
-          `Paragraphs ${start + 1}-${actualEnd + 1} not found. Document has ${data.profile.paragraphCount} paragraphs.`,
-          { error: "out_of_range", paragraphCount: data.profile.paragraphCount });
+          `Paragraphs ${start + 1}-${actualEnd + 1} not found. Document has ${profile.paragraphCount} paragraphs.`,
+          { error: "out_of_range", paragraphCount: profile.paragraphCount });
       }
       const formatted = items.map(p => {
-        const paraText = data.content.substring(p.start, p.end);
+        const paraText = content.substring(p.start, p.end);
         return `Paragraph ${p.index + 1} (lines ${p.lineStart}-${p.lineEnd}, ${p.wordCount} words):\n"${paraText}"`;
       }).join("\n\n");
       const text = `Paragraphs ${start + 1}-${actualEnd + 1}:\n\n${formatted}`;
@@ -872,18 +846,14 @@ export const GetQuoteAction: Action = {
 
     // --- SECTION mode: retrieve specific section ---
     if (inferred.mode === "section" && inferred.sectionName) {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
-      const sectionProfile = detectSections(data.content);
+      const sectionProfile = detectSections(content);
       let section = sectionProfile.sections.find(s => s.name === inferred.sectionName);
 
       // Fallback: if "abstract" was requested but not found, return first paragraph as summary
       if (!section && inferred.sectionName === "abstract") {
-        const para = data.profile.paragraphs[0];
+        const para = profile.paragraphs[0];
         if (para) {
-          const paraText = data.content.substring(para.start, para.end);
+          const paraText = content.substring(para.start, para.end);
           const text = `No labeled abstract found. Summary (first paragraph, lines ${para.lineStart}-${para.lineEnd}, ${para.wordCount} words):\n"${paraText}"`;
           return respond(callback, true, text, {
             url, sectionName: "summary", fallback: true,
@@ -907,11 +877,7 @@ export const GetQuoteAction: Action = {
 
     // --- SECTION_LIST mode: list all sections ---
     if (inferred.mode === "section_list") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
-      const sectionProfile = detectSections(data.content);
+      const sectionProfile = detectSections(content);
       if (sectionProfile.sections.length === 0) {
         return respond(callback, false, "No sections detected in this document.", { error: "no_sections" });
       }
@@ -928,30 +894,26 @@ export const GetQuoteAction: Action = {
 
     // --- COMPOUND mode: multiple nth requests combined ---
     if (inferred.mode === "compound" && inferred.parts) {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
       const results: string[] = [];
       for (const part of inferred.parts) {
         const n = part.count ?? 1;
         const unit = part.unit ?? "sentence";
         if (unit === "sentence") {
-          const sentence = data.profile.sentences[n - 1];
+          const sentence = profile.sentences[n - 1];
           if (sentence) results.push(`Sentence ${n} (line ${sentence.lineNumber}): "${sentence.text}"`);
           else results.push(`Sentence ${n}: not found`);
         } else if (unit === "paragraph") {
-          const para = data.profile.paragraphs[n - 1];
+          const para = profile.paragraphs[n - 1];
           if (para) {
-            const paraText = data.content.substring(para.start, para.end);
+            const paraText = content.substring(para.start, para.end);
             results.push(`Paragraph ${n} (lines ${para.lineStart}-${para.lineEnd}):\n"${paraText}"`);
           } else results.push(`Paragraph ${n}: not found`);
         } else if (unit === "line") {
-          const line = data.profile.lines[n - 1];
-          if (line) results.push(`Line ${n}: "${data.content.substring(line.start, line.end)}"`);
+          const line = profile.lines[n - 1];
+          if (line) results.push(`Line ${n}: "${content.substring(line.start, line.end)}"`);
           else results.push(`Line ${n}: not found`);
         } else if (unit === "word") {
-          const allWords = data.content.trim().split(/\s+/);
+          const allWords = content.trim().split(/\s+/);
           const word = allWords[n - 1];
           if (word) results.push(`Word ${n}: "${word}"`);
           else results.push(`Word ${n}: not found`);
@@ -963,7 +925,7 @@ export const GetQuoteAction: Action = {
 
     // --- SEARCH_ALL mode (with optional countOnly) ---
     if (inferred.mode === "search_all") {
-      const result = await getExactQuoteAll(runtime, url, inferred.searchText!);
+      const result = getExactQuoteAll(content, inferred.searchText!);
       if (result.totalCount === 0) {
         return respond(callback, false,
           `No mentions of "${inferred.searchText}" found.`,
@@ -982,23 +944,19 @@ export const GetQuoteAction: Action = {
 
     // --- RANGE mode: lines N to M ---
     if (inferred.mode === "range") {
-      const data = await getOrComputeProfile(runtime, url);
-      if (!data) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
       const start = (inferred.lineNumber ?? 1) - 1;
       const actualEnd = Math.min(
         (inferred.lineEnd ?? start + 1) - 1,
-        data.profile.lineCount - 1
+        profile.lineCount - 1
       );
-      const lines = data.profile.lines.slice(start, actualEnd + 1);
+      const lines = profile.lines.slice(start, actualEnd + 1);
       if (lines.length === 0) {
         return respond(callback, false,
-          `Lines ${start + 1}-${actualEnd + 1} not found. Document has ${data.profile.lineCount} lines.`,
-          { error: "out_of_range", lineCount: data.profile.lineCount });
+          `Lines ${start + 1}-${actualEnd + 1} not found. Document has ${profile.lineCount} lines.`,
+          { error: "out_of_range", lineCount: profile.lineCount });
       }
       const formatted = lines.map(l => {
-        const lineText = data.content.substring(l.start, l.end);
+        const lineText = content.substring(l.start, l.end);
         return `${l.index + 1}: "${lineText}"`;
       }).join("\n");
       const text = `Lines ${start + 1}-${actualEnd + 1}:\n${formatted}`;
@@ -1007,28 +965,27 @@ export const GetQuoteAction: Action = {
 
     // --- FULL mode ---
     if (inferred.mode === "full") {
-      const content = await getFullDocument(runtime, url);
-      if (!content) {
-        return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
-      }
       const text = `Full document (${content.length} chars):\n\n${content.slice(0, 5000)}${content.length > 5000 ? "\n...[truncated]" : ""}`;
       return respond(callback, true, text, { url, charCount: content.length });
     }
 
     // --- LINE mode ---
     if (inferred.mode === "line" && inferred.lineNumber) {
-      const line = await getLineContent(runtime, url, inferred.lineNumber);
-      if (line === null) {
-        return respond(callback, false, `Line ${inferred.lineNumber} not found in ${url}`, { error: "not_found" });
+      const lineInfo = profile.lines[inferred.lineNumber - 1];
+      if (!lineInfo) {
+        return respond(callback, false,
+          `Line ${inferred.lineNumber} not found. Document has ${profile.lineCount} lines.`,
+          { error: "out_of_range", lineCount: profile.lineCount });
       }
-      const text = `Line ${inferred.lineNumber}: "${line}"`;
-      return respond(callback, true, text, { url, lineNumber: inferred.lineNumber, content: line });
+      const lineText = content.substring(lineInfo.start, lineInfo.end);
+      const text = `Line ${inferred.lineNumber}: "${lineText}"`;
+      return respond(callback, true, text, { url, lineNumber: inferred.lineNumber, content: lineText });
     }
 
     // --- SEARCH mode ---
     const searchText = inferred.searchText ?? (args.searchText as string | undefined);
     if (searchText) {
-      const result = await getExactQuote(runtime, url, searchText);
+      const result = getExactQuote(content, searchText);
       if (!result.found) {
         return respond(callback, false, `Text not found in ${url}`, { error: "not_found" });
       }
@@ -1041,13 +998,7 @@ export const GetQuoteAction: Action = {
     }
 
     // Default fallback: full doc
-    const fallbackContent = await getFullDocument(runtime, url);
-    if (fallbackContent) {
-      const text = `Full document (${fallbackContent.length} chars):\n\n${fallbackContent.slice(0, 5000)}${fallbackContent.length > 5000 ? "\n...[truncated]" : ""}`;
-      return respond(callback, true, text, { url, charCount: fallbackContent.length, mode: "full-fallback" });
-    }
-    return respond(callback, false,
-      "Specify what to retrieve: a line number, search text in quotes, 'last line', 'last 2 sentences', 'paragraph 3', 'stats', or 'full' document.",
-      { error: "invalid_params" });
+    const fallbackText = `Full document (${content.length} chars):\n\n${content.slice(0, 5000)}${content.length > 5000 ? "\n...[truncated]" : ""}`;
+    return respond(callback, true, fallbackText, { url, charCount: content.length, mode: "full-fallback" });
   },
 };

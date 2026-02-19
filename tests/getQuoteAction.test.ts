@@ -2,11 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GetQuoteAction } from "../src/actions/getQuoteAction";
 import { createMockRuntime } from "./setup";
 
-// Mock the integration module
+// Mock the integration module (pure functions, no DB access)
 vi.mock("../src/integration/getExactQuote", () => ({
-  getExactQuote: vi.fn(),
-  getLineContent: vi.fn(),
-  getFullDocument: vi.fn(),
+  getExactQuote: vi.fn().mockReturnValue({ found: false }),
+  getExactQuoteAll: vi.fn().mockReturnValue({ matches: [], totalCount: 0 }),
 }));
 
 // Mock the repository for profile-aware handler
