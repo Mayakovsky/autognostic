@@ -1,7 +1,7 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-18 18:39 (local)
-> Updated by: Claude Opus 4.6 — arXiv PDF section detection fix + summary fallback
-> Session label: Fix section detection for arXiv PDFs, add summary/overview aliases
+> Last updated: 2026-02-18 18:48 (local)
+> Updated by: Claude Opus 4.6 — API research + Phase 4 roadmap
+> Session label: Research scientific clearinghouse APIs, plan Phase 4 discovery layer
 > Staleness gate: 2026-02-18 — if today is >3 days past this,
 >   verify state before acting (see Section 3 of SeshMem schema).
 
@@ -9,6 +9,7 @@
 - [x] Phase 2 WS1-WS4: GrammarEngine, WebPageProcessor, PdfExtractor, ScientificSectionDetector, inferMode hardening
 - [x] Audit entire ingestion pipeline (URL→fetch→parse→store→retrieve) — root cause analysis complete
 - [x] **Phase 3: Execute PHASE3_PLAN.md** — ContentResolver, simplified mirrorDoc, build canary, WebPageProcessor hardening
+- [ ] **Phase 4: Discovery layer** — Unpaywall OA resolver, Semantic Scholar search, OpenAlex metadata (see research below)
 
 ## What Works (verified)
 - ✅ Build (`bun run build`) — 0 errors — verified 2026-02-18
@@ -63,21 +64,110 @@ All 6 workstreams completed in order. 309 tests pass (272 original + 37 new). Ze
 | WS-5 | (folded into WS-3) | Diagnostic logging via logger.child() |
 | WS-6 | e8533fe | Academic publisher Accept header test |
 
+## Phase 4 Research: Scientific Clearinghouse APIs (2026-02-18)
+
+### Key Finding
+The generic URL pipeline (ContentResolver → WebPageProcessor/PdfExtractor) is already the correct
+architecture for **content ingestion**. Every clearinghouse ultimately serves HTML or PDF at a URL.
+Building parallel API-specific extraction would duplicate work and add 10 maintenance surfaces.
+
+The APIs are most valuable as a **thin discovery/resolution layer upstream** that produces URLs
+the existing pipeline handles. Architecture:
+
+```
+User: URL or DOI or search query
+         |
+         v
+  [Discovery Layer] (NEW — Phase 4)
+  |  Unpaywall: DOI → free PDF URL
+  |  Semantic Scholar: topic → paper URLs + citation graph
+  |  OpenAlex: topic → paper URLs + OA locations + metadata
+         |
+         v
+  [Existing Pipeline] (NO CHANGES)
+  ContentResolver → WebPageProcessor / PdfExtractor
+         |
+         v
+  ScientificSectionDetector → Knowledge Store
+```
+
+### API Comparison (top 10 free sources)
+
+| Source | Papers | Full Text? | PDF Direct? | Key? | Rate Limit | Best Use |
+|--------|--------|-----------|-------------|------|-----------|----------|
+| **arXiv** | 2.96M | No (API) | Yes (URL pattern) | No | 1 req/3s | Already handled — PDF-first Accept headers |
+| **PubMed/PMC** | 39M/10M | Yes (PMC OA XML) | Yes (OA) | Optional | 3-10 req/s | PMC HTML already works via WebPageProcessor |
+| **Semantic Scholar** | 215M | No | OA PDF URLs | Optional | 5K/5min | **Discovery**: related papers, citation graph |
+| **OpenAlex** | 278-470M | TEI XML (43M) | Yes (60M) | Free key | 100K credits/day | **Search**: broadest catalog, OA locations |
+| **CORE** | 431M/40M FT | Yes (in response) | Yes | Yes | 5-10 req/10s | Fallback only (low free-tier limits) |
+| **Crossref** | 176M | No | No | No | 50 req/s | **Already integrated** for DOI verification |
+| **Unpaywall** | 176M/27M OA | No | OA PDF URLs | No (email) | 100K/day | **Highest ROI**: DOI → free PDF, ~20 lines |
+| **DOAJ** | 11M | No | Publisher links | No | 2 req/s | OA journal verification only |
+| **Europe PMC** | 46M | Yes (OA XML) | Yes (OA) | No | ~10 req/s | Superset of PubMed, better API ergonomics |
+| **bioRxiv/medRxiv** | 335K | No (API) | Yes (URL pattern) | No | ~1 req/s | Already handled — predictable PDF URLs |
+
+### What NOT to build (generic pipeline already handles these)
+- arXiv API integration (PDF URLs are predictable, Accept headers already PDF-first)
+- bioRxiv/medRxiv API integration (same — predictable PDF URLs)
+- Crossref expansion (already integrated for DOI verification)
+- CORE API (free tier too limited)
+- DOAJ API (low incremental value)
+
+### Phase 4 Workstreams (proposed, ordered by ROI)
+
+**WS-1: Unpaywall OA Resolver** (highest ROI, simplest)
+- New service: `UnpaywallResolver.ts`
+- Single function: `getOpenAccessUrl(doi: string): Promise<string | null>`
+- Calls `https://api.unpaywall.org/v2/{doi}?email={email}` → returns `best_oa_location.url_for_pdf`
+- Integration point: when user provides a DOI or paywalled URL, auto-resolve to free PDF
+- Already extract DOIs in `ScientificPaperDetector` — wire it up
+- ~20-30 lines of core code + tests
+- Env var: `UNPAYWALL_EMAIL` (no API key needed, just email)
+
+**WS-2: Semantic Scholar Discovery** (new capability: "find related papers")
+- New service: `SemanticScholarService.ts`
+- Endpoints: paper lookup by DOI/URL, related papers, citation graph
+- New action: `FIND_RELATED_PAPERS` — given ingested paper, suggest related work
+- API: `https://api.semanticscholar.org/graph/v1/paper/{id}` (free, optional key for higher limits)
+- Returns `openAccessPdf.url` → feed to existing ContentResolver
+
+**WS-3: OpenAlex Search** (new capability: "search for papers by topic")
+- New service: `OpenAlexService.ts`
+- Endpoints: search works by query, filter by OA status/date/field
+- New action: `SEARCH_PAPERS` — find papers matching a topic query
+- API: `https://api.openalex.org/works?search={query}` (free key via email)
+- Returns OA location URLs → feed to existing ContentResolver
+- TEI XML endpoint (`/works/{id}.grobid-xml`) as optional section-structured fast path
+
+**WS-4 (stretch): Europe PMC Full Text** (life sciences fast path)
+- Only if WS-1/2/3 prove insufficient for biomedical content
+- Full-text XML API bypasses HTML/PDF parsing entirely
+- Low priority — PMC HTML pages already work via WebPageProcessor
+
+### Non-API Next Steps (general hardening)
+- Verify GET_EXACT_QUOTE returns correct individual sections (not merged) — partially tested
+- Test more diverse PDFs: double-column layouts, supplementary materials, non-English
+- Error UX: better messages when URL is paywalled or PDF extraction fails
+- Rate limiting / caching for repeated URL fetches
+
 ## Next Actions (ordered)
 1. ~~Rebuild agent and test live~~ — DONE
 2. ~~Start agent, verify build canary~~ — DONE (2026-02-18T01:09:31Z)
 3. ~~Test Springer URL end-to-end~~ — DONE: 43,857 chars, 29 headings, abstract + conclusion queries work
-4. Test arXiv URL → PDF extraction in live agent
+4. ~~Test arXiv URL → PDF extraction in live agent~~ — DONE: 39,976 chars, 6 sections detected
 5. Verify GET_EXACT_QUOTE returns correct individual sections (not merged)
+6. **Phase 4 WS-1: Unpaywall OA resolver** (DOI → free PDF URL)
+7. **Phase 4 WS-2: Semantic Scholar discovery** (FIND_RELATED_PAPERS action)
+8. **Phase 4 WS-3: OpenAlex search** (SEARCH_PAPERS action)
 
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-18 | Mayakovsky | Add Phase 4 roadmap: discovery layer for scientific paper AP | b8b1cac |
+| 2026-02-18 | Claude Opus 4.6 | API research + Phase 4 roadmap in heartbeat | — |
 | 2026-02-18 | Mayakovsky | Fix arXiv PDF section detection + add summary/overview alias | 2b2e114 |
 | 2026-02-18 | Mayakovsky | Handle numbered section headers and Abstract after email in  | 73cb303 |
 | 2026-02-18 | Mayakovsky | Add post-extraction pass to strip publisher page chrome | 6c9e301 |
-| 2026-02-18 | Mayakovsky | Fix JUNK_CLASS_PATTERN false positive on layout utility clas | dbeac77 |
-| 2026-02-18 | Claude Opus 4.6 | Fix JUNK_CLASS_PATTERN false positive + Springer e2e test passes | pending |
 
 ## Guardrails (DO / DON'T)
 DO:
