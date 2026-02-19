@@ -17,6 +17,7 @@ import { ListDocumentsAction } from "./actions/listDocumentsAction";
 import { RemoveDocumentAction } from "./actions/removeDocumentAction";
 import { SetVersionTrackingAction } from "./actions/setVersionTrackingAction";
 import { RefreshSourceAction } from "./actions/refreshSourceAction";
+import { FindRelatedPapersAction } from "./actions/findRelatedPapersAction";
 
 import { fullDocumentProvider } from "./providers/fullDocumentProvider";
 import { knowledgeSummaryProvider } from "./providers/knowledgeSummaryProvider";
@@ -82,6 +83,7 @@ export const autognosticPlugin: Plugin = {
     SetAutognosticSizePolicyAction,
     SetVersionTrackingAction,
     RefreshSourceAction,
+    FindRelatedPapersAction,
   ],
   providers: [knowledgeSummaryProvider, fullDocumentProvider],
   // Override plugin-ollama's broken TEXT_EMBEDDING handler (ollama-ai-provider v1
@@ -125,6 +127,16 @@ export {
   extractDoiFromUrl,
   type UnpaywallResult,
 } from "./services/UnpaywallResolver";
+
+export {
+  lookupPaper,
+  getRelatedPapers,
+  getCitations,
+  getReferences,
+  buildPaperId,
+  type S2Paper,
+  type S2RelatedResult,
+} from "./services/SemanticScholarService";
 
 // Schema types
 export type {
