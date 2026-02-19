@@ -83,6 +83,21 @@ export function normalizePdfText(text: string): string {
   );
   result = result.replace(numberedRe, "$1\n\n$2 $3\n");
 
+  // Pattern 5: Numbered section headers after word characters (no punctuation)
+  // (e.g., "...Solidity 1 INTRODUCTION The purpose..." or "...bootstrap5 2 MOTIVATION Research...")
+  // Only matches when section name is ALL CAPS to reduce false positives
+  const numberedAfterWordRe = new RegExp(
+    `(\\w)\\s+(\\d{1,2}(?:\\.\\d{1,2})?)\\s+((?:${SECTION_NAMES_RE})(?=\\s))(?=[A-Z\\s]*[A-Z]{2})`,
+    "gi"
+  );
+  result = result.replace(numberedAfterWordRe, (match, pre, num, name) => {
+    // Only insert break if the section name is ALL CAPS (strong heading signal)
+    if (name === name.toUpperCase()) {
+      return `${pre}\n\n${num} ${name}\n`;
+    }
+    return match;
+  });
+
   // Step 2: If text is still very flat (>2000 chars per line average),
   // break on sentence-ending period followed by capital letter
   const newLineCount = result.split("\n").length;

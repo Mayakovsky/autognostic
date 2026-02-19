@@ -15,6 +15,12 @@ describe("ScientificSectionDetector", () => {
       expect(normalizeSectionName("References")).toBe("references");
     });
 
+    it("maps summary and overview to abstract", () => {
+      expect(normalizeSectionName("Summary")).toBe("abstract");
+      expect(normalizeSectionName("Overview")).toBe("abstract");
+      expect(normalizeSectionName("summary")).toBe("abstract");
+    });
+
     it("normalizes variations", () => {
       expect(normalizeSectionName("Conclusions")).toBe("conclusion");
       expect(normalizeSectionName("Acknowledgements")).toBe("acknowledgments");
@@ -169,10 +175,90 @@ We achieved high accuracy.`;
       expect(abstractSection!.displayName).toBe("(Inferred Abstract)");
     });
 
+    it("infers abstract from long preamble containing 'Abstract' keyword", () => {
+      // Simulates a PDF where title + authors + abstract are in one block > 3000 chars
+      const longTitle = "A ".repeat(1600); // ~3200 chars of title/author metadata
+      const abstractContent = "We present a novel approach to machine learning that improves accuracy. " +
+        "Our method achieves state-of-the-art results on benchmark datasets.";
+      const text = `${longTitle}Abstract ${abstractContent}
+
+## Introduction
+
+We begin with motivation.
+
+## Methods
+
+Our approach uses deep learning.
+
+## Results
+
+We achieved high accuracy.`;
+      const profile = detectSections(text);
+      const abstractSection = profile.sections.find(s => s.name === "abstract");
+      expect(abstractSection).toBeDefined();
+      expect(abstractSection!.text).toContain("We present a novel approach");
+      // Should NOT contain the long title padding
+      expect(abstractSection!.text.length).toBeLessThan(500);
+    });
+
     it("handles empty text", () => {
       const profile = detectSections("");
       expect(profile.isScientificFormat).toBe(false);
       expect(profile.sections).toHaveLength(0);
+    });
+
+    it("filters out false headings after references section", () => {
+      // Simulates PDF reference text where "Introduction" appears as a standalone
+      // line from a book title like "Introduction to Bootstrap"
+      const text = `## Introduction
+
+Some intro text here.
+
+## Methods
+
+Methods description here.
+
+## Results
+
+Results go here.
+
+## References
+
+[1] Smith et al. 2024. A survey of NLP methods.
+[22] Cohen et al. 2022.
+[23] Jörg Krause. 2020.
+
+Introduction
+
+to Bootstrap.
+In Introducing Bootstrap 4.
+Springer, 1-17.`;
+      const profile = detectSections(text);
+      // Should only have 4 sections, not 5 — the "Introduction" in references is filtered
+      const introSections = profile.sections.filter(s => s.name === "introduction");
+      expect(introSections).toHaveLength(1);
+      expect(introSections[0].startLine).toBeLessThan(10); // The real one, not line 260
+      // References should be the last section
+      const lastSection = profile.sections[profile.sections.length - 1];
+      expect(lastSection.name).toBe("references");
+    });
+
+    it("keeps all sections when no references section exists", () => {
+      const text = `## Introduction
+
+Some text.
+
+## Methods
+
+Methods text.
+
+## Conclusion
+
+Final text.`;
+      const profile = detectSections(text);
+      expect(profile.sectionNames).toContain("introduction");
+      expect(profile.sectionNames).toContain("methods");
+      expect(profile.sectionNames).toContain("conclusion");
     });
   });
 });

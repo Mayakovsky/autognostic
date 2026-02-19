@@ -130,9 +130,9 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
   }
 
   // --- Priority 1b: Full stats overview ---
-  // "stats", "statistics", "overview", "how long is it", "length of the document"
+  // "stats", "statistics", "how long is it", "length of the document"
+  // Note: "overview" was removed — it now routes to section(abstract) at P5.5
   if (/\bstatistics?\b|\bstats\b/i.test(text) ||
-      /\boverview\b/i.test(text) ||
       /how\s+long\s+is/i.test(text) ||
       /\blength\b.*\b(?:document|doc|file|paper|it)\b/i.test(text)) {
     return { mode: "stats" };
@@ -181,7 +181,7 @@ export function inferMode(messageText: string, args: Record<string, unknown> = {
   }
 
   // --- Priority 5.5: Section routing (before last_paragraph at P7) ---
-  const SECTION_KW = /(abstract|introduction|background|methods?|methodology|results?|discussion|conclusions?|references?|bibliography|acknowledg\w*|appendix|supplementary|keywords?|literature)/i;
+  const SECTION_KW = /(abstract|summary|overview|introduction|background|methods?|methodology|results?|discussion|conclusions?|references?|bibliography|acknowledg\w*|appendix|supplementary|keywords?|literature)/i;
   const sectionMatch = text.match(
     new RegExp(`(?:show\\s+(?:me\\s+)?(?:the\\s+)?|read\\s+(?:the\\s+)?|what(?:'s|\\s+is)\\s+(?:in\\s+)?(?:the\\s+)?|(?:give|get)\\s+(?:me\\s+)?(?:the\\s+)?|the\\s+)(${SECTION_KW.source})(?:\\s+(?:section|part))?`, "i")
   );
@@ -546,7 +546,7 @@ export const GetQuoteAction: Action = {
 
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
     const text = ((message.content as Content)?.text || "").toLowerCase();
-    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+(?:words?|sentences?|paragraphs?|lines?))|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full|paragraph)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document|last|first)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper)|how\s+many\s+(?:words?|lines?|sentences?|paragraphs?|characters?|chars?)|word\s+count|line\s+count|sentence\s+count|paragraph\s+count|character\s+count|statistics?|stats|paragraph\s+\d+|lines?\s+\d+\s+(?:to|through|thru)|(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|\d+(?:st|nd|rd|th))\s+(?:sentence|paragraph|line|word)|(?:sentence|paragraph|line)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|how\s+long\s+is|count\s+the\s+(?:words?|lines?|sentences?|paragraphs?|characters?)|length|number\s+of\s+(?:words?|lines?|sentences?|paragraphs?)|total\s+(?:words?|lines?|sentences?|paragraphs?)|(?:find|locate|search|look\s+for)|(?:is|does)\s+(?:it\s+)?(?:mention|discuss|reference|include)|(?:does\s+it\s+)?talk\s+about|every\s+(?:mention|occurrence|instance)\s+of|how\s+does\s+it\s+(?:start|begin|end)|(?:the\s+)?(?:opening|beginning|ending|conclusion)\s+of|(?:the\s+)?(?:abstract|introduction|methods?|results?|discussion|conclusions?|references?|acknowledgments?|bibliography)|list\s+(?:the\s+)?sections|table\s+of\s+contents|how\s+many\s+times|penultimate|next\s+to\s+last|(?:go|skip)\s+to\s+(?:line|paragraph)|read\s+it|tell\s+me\s+about\s+(?:the\s+)?(?:document|doc)|sentences?\s+\d+\s+(?:to|through|thru)|paragraphs?\s+\d+\s+(?:to|through|thru)|from\s+line|everything\s+after|para\s+\d+)/i.test(text);
+    return /\b(quote|line\s+\d+|exact|verbatim|repeat.*(?:line|sentence|paragraph|word)|read\s+(?:me\s+)?(?:the\s+)?(?:line|back|from|what|document|doc|file|paper|it)|(?:first|last|next|previous)\s+(?:line|sentence|paragraph|word|\d+\s+(?:words?|sentences?|paragraphs?|lines?))|what\s+does\s+(?:it|the\s+\w+)\s+say|recite|word\s+for\s+word|copy\s+(?:the\s+)?(?:text|line|content)|print\s+(?:the\s+)?(?:document|doc|file|contents?|text|it|full)|show\s+(?:me\s+)?(?:the\s+)?(?:document|doc|file|contents?|text|full|paragraph)|(?:give|get)\s+(?:me\s+)?(?:the\s+)?(?:text|contents?|full|document|last|first)|contents?\s+of|full\s+(?:document|text|contents?)|what(?:'s|\s+is)\s+in\s+(?:the\s+)?(?:document|doc|file|paper)|how\s+many\s+(?:words?|lines?|sentences?|paragraphs?|characters?|chars?)|word\s+count|line\s+count|sentence\s+count|paragraph\s+count|character\s+count|statistics?|stats|paragraph\s+\d+|lines?\s+\d+\s+(?:to|through|thru)|(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|\d+(?:st|nd|rd|th))\s+(?:sentence|paragraph|line|word)|(?:sentence|paragraph|line)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|how\s+long\s+is|count\s+the\s+(?:words?|lines?|sentences?|paragraphs?|characters?)|length|number\s+of\s+(?:words?|lines?|sentences?|paragraphs?)|total\s+(?:words?|lines?|sentences?|paragraphs?)|(?:find|locate|search|look\s+for)|(?:is|does)\s+(?:it\s+)?(?:mention|discuss|reference|include)|(?:does\s+it\s+)?talk\s+about|every\s+(?:mention|occurrence|instance)\s+of|how\s+does\s+it\s+(?:start|begin|end)|(?:the\s+)?(?:opening|beginning|ending|conclusion)\s+of|(?:the\s+)?(?:abstract|summary|overview|introduction|methods?|results?|discussion|conclusions?|references?|acknowledgments?|bibliography)|list\s+(?:the\s+)?sections|table\s+of\s+contents|how\s+many\s+times|penultimate|next\s+to\s+last|(?:go|skip)\s+to\s+(?:line|paragraph)|read\s+it|tell\s+me\s+about\s+(?:the\s+)?(?:document|doc)|sentences?\s+\d+\s+(?:to|through|thru)|paragraphs?\s+\d+\s+(?:to|through|thru)|from\s+line|everything\s+after|para\s+\d+)/i.test(text);
   },
 
   async handler(
@@ -877,7 +877,21 @@ export const GetQuoteAction: Action = {
         return respond(callback, false, `Document not found: ${url}`, { error: "not_found" });
       }
       const sectionProfile = detectSections(data.content);
-      const section = sectionProfile.sections.find(s => s.name === inferred.sectionName);
+      let section = sectionProfile.sections.find(s => s.name === inferred.sectionName);
+
+      // Fallback: if "abstract" was requested but not found, return first paragraph as summary
+      if (!section && inferred.sectionName === "abstract") {
+        const para = data.profile.paragraphs[0];
+        if (para) {
+          const paraText = data.content.substring(para.start, para.end);
+          const text = `No labeled abstract found. Summary (first paragraph, lines ${para.lineStart}-${para.lineEnd}, ${para.wordCount} words):\n"${paraText}"`;
+          return respond(callback, true, text, {
+            url, sectionName: "summary", fallback: true,
+            startLine: para.lineStart, endLine: para.lineEnd, wordCount: para.wordCount,
+          });
+        }
+      }
+
       if (!section) {
         const available = sectionProfile.sectionNames.join(", ") || "none detected";
         return respond(callback, false,

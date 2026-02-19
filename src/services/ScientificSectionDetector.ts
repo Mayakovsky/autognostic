@@ -54,6 +54,8 @@ const CANONICAL: Record<string, string> = {
   "results and discussion": "results",
   "supplementary material": "supplementary",
   "supplementary materials": "supplementary",
+  summary: "abstract",
+  overview: "abstract",
 };
 
 /**
@@ -141,6 +143,17 @@ export function detectSections(text: string): SectionProfile {
     }
   }
 
+  // Filter out false headings that appear after references/bibliography.
+  // Reference lists often contain book/paper titles that match section names
+  // (e.g., "Introduction to Bootstrap" split across lines → standalone "Introduction").
+  const refsIdx = headings.findIndex(
+    (h) => h.canonical === "references" || h.canonical === "bibliography"
+  );
+  if (refsIdx >= 0) {
+    // Keep references heading, remove everything after it
+    headings.splice(refsIdx + 1);
+  }
+
   // Build sections from headings
   const sections: DocumentSection[] = [];
   for (let h = 0; h < headings.length; h++) {
@@ -164,14 +177,13 @@ export function detectSections(text: string): SectionProfile {
     });
   }
 
-  // Special case: infer unlabeled abstract from first short block before first heading
-  if (headings.length > 0 && headings[0].lineIndex > 0) {
-    const beforeFirst = lines.slice(0, headings[0].lineIndex).join("\n").trim();
-    if (
-      beforeFirst.length > 50 &&
-      beforeFirst.length < 3000 &&
-      !sections.some((s) => s.name === "abstract")
-    ) {
+  // Special case: infer unlabeled abstract from text before first heading
+  if (headings.length > 0 && headings[0].lineIndex > 0 && !sections.some((s) => s.name === "abstract")) {
+    const beforeFirstLines = lines.slice(0, headings[0].lineIndex);
+    const beforeFirst = beforeFirstLines.join("\n").trim();
+
+    if (beforeFirst.length > 50 && beforeFirst.length < 3000) {
+      // Short preamble — use the whole thing as inferred abstract
       sections.unshift({
         name: "abstract",
         displayName: "(Inferred Abstract)",
@@ -180,6 +192,26 @@ export function detectSections(text: string): SectionProfile {
         text: beforeFirst,
         wordCount: countWords(beforeFirst),
       });
+    } else if (beforeFirst.length >= 3000) {
+      // Long preamble — look for "Abstract" keyword within it to extract just the abstract portion.
+      // Common in PDFs where title, authors, and abstract are in the same text block.
+      const abstractIdx = beforeFirst.search(/\bAbstract\b/i);
+      if (abstractIdx >= 0) {
+        const abstractText = beforeFirst.substring(abstractIdx).replace(/^Abstract\s*/i, "").trim();
+        // Find the line number where "Abstract" appears
+        const charsBeforeAbstract = beforeFirst.substring(0, abstractIdx);
+        const abstractStartLine = charsBeforeAbstract.split("\n").length;
+        if (abstractText.length > 30) {
+          sections.unshift({
+            name: "abstract",
+            displayName: "(Inferred Abstract)",
+            startLine: abstractStartLine,
+            endLine: headings[0].lineIndex,
+            text: abstractText,
+            wordCount: countWords(abstractText),
+          });
+        }
+      }
     }
   }
 

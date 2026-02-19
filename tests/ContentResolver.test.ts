@@ -474,5 +474,27 @@ describe("ContentResolver", () => {
       const result = normalizePdfText(flat);
       expect(result).toContain("\n\nAbstract\n");
     });
+
+    it("splits ALL CAPS numbered section headers without leading punctuation", () => {
+      const flat =
+        "Additional Key Words and Phrases: Matic, Metamask, polygon, bootstrap5, Solidity " +
+        "1 INTRODUCTION The purpose of this report is to describe the technical details. " +
+        "The NFTrig project is based around the creation of a web application. " +
+        "2 BACKGROUND The purpose of this application is as an educational tool.";
+      const result = normalizePdfText(flat);
+      expect(result).toContain("\n\n1 INTRODUCTION\n");
+      expect(result).toContain("\n\n2 BACKGROUND\n");
+    });
+
+    it("does not split mixed-case numbered sections without punctuation", () => {
+      // "Introduction" in mixed case after a word (not ALL CAPS) should not split
+      // if there's no preceding punctuation — reduces false positives in running text
+      const flat =
+        "We used 2 Introduction paragraphs in the paper. " +
+        "The data was collected from 3 Results tables.";
+      const result = normalizePdfText(flat);
+      // Should NOT create section breaks for mixed-case after word characters
+      expect(result).not.toContain("\n\n2 Introduction\n");
+    });
   });
 });

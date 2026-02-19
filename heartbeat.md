@@ -1,7 +1,7 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-18 16:48 (local)
-> Updated by: Claude Opus 4.6 — JUNK_CLASS_PATTERN fix + Springer e2e test
-> Session label: Fix WebPageProcessor junk class false positive on layout utility classes
+> Last updated: 2026-02-18 18:39 (local)
+> Updated by: Claude Opus 4.6 — arXiv PDF section detection fix + summary fallback
+> Session label: Fix section detection for arXiv PDFs, add summary/overview aliases
 > Staleness gate: 2026-02-18 — if today is >3 days past this,
 >   verify state before acting (see Section 3 of SeshMem schema).
 
@@ -12,13 +12,17 @@
 
 ## What Works (verified)
 - ✅ Build (`bun run build`) — 0 errors — verified 2026-02-18
-- ✅ Tests (`npx vitest run`) — 309/309 pass across 17 test files — verified 2026-02-18
+- ✅ Tests (`npx vitest run`) — 326/326 pass across 17 test files — verified 2026-02-18
 - ✅ Build canary: plugin logs `Phase 3, built <timestamp>` on startup — verified 2026-02-17
 - ✅ ContentResolver: unified URL→text pipeline, routes on response content-type — verified 2026-02-17
 - ✅ PDF magic byte verification: dual gate (content-type + %PDF header) — verified 2026-02-17
 - ✅ HTML quality gate: prefer structured HTML (≥3 headings, >5K chars) over PDF — verified 2026-02-18
-- ✅ normalizePdfText: section headers placed on own lines (Pattern 1 colon, Pattern 2 post-punct) — verified 2026-02-18
-- ✅ ScientificSectionDetector: singular→plural CANONICAL mappings (method→methods, result→results) — verified 2026-02-18
+- ✅ normalizePdfText: section headers placed on own lines (Patterns 1-5: colon, post-punct, Abstract, numbered+punct, numbered+word ALL CAPS) — verified 2026-02-18
+- ✅ ScientificSectionDetector: singular→plural CANONICAL mappings + summary/overview→abstract aliases — verified 2026-02-18
+- ✅ ScientificSectionDetector: post-references heading filter (prevents false matches in reference text) — verified 2026-02-18
+- ✅ ScientificSectionDetector: long-preamble abstract inference (searches for "Abstract" keyword in >3000-char preambles) — verified 2026-02-18
+- ✅ Section fallback: "summary"/"overview" → abstract, with first-paragraph fallback when no abstract detected — verified 2026-02-18
+- ✅ arXiv PDF e2e: 39,976 chars, 6 sections detected (abstract inferred, 1 INTRODUCTION, 3 RELATED WORK, 6 METHODS, 7 RESULTS, REFERENCES) — verified 2026-02-18
 - ✅ Accept header strategy: PDF-first for academic publisher URLs — verified 2026-02-17
 - ✅ mirrorDocToKnowledge simplified: uses ContentResolver, ~180 lines deleted — verified 2026-02-17
 - ✅ WebPageProcessor hardening: publisher selectors, reference whitelist, 500K length guard — verified 2026-02-17
@@ -69,11 +73,11 @@ All 6 workstreams completed in order. 309 tests pass (272 original + 37 new). Ze
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-18 | Mayakovsky | Fix arXiv PDF section detection + add summary/overview alias | 2b2e114 |
 | 2026-02-18 | Mayakovsky | Handle numbered section headers and Abstract after email in  | 73cb303 |
 | 2026-02-18 | Mayakovsky | Add post-extraction pass to strip publisher page chrome | 6c9e301 |
 | 2026-02-18 | Mayakovsky | Fix JUNK_CLASS_PATTERN false positive on layout utility clas | dbeac77 |
 | 2026-02-18 | Claude Opus 4.6 | Fix JUNK_CLASS_PATTERN false positive + Springer e2e test passes | pending |
-| 2026-02-18 | Mayakovsky | Grant blanket read permissions in CLAUDE.md | 9be67da |
 
 ## Guardrails (DO / DON'T)
 DO:

@@ -56,7 +56,6 @@ describe("inferMode — Section 12 test matrix", () => {
     ["length of the document", "stats"],
     ["give me the stats", "stats"],
     ["statistics", "stats"],
-    ["overview", "stats"],
   ])('"%s" → %s', (input, mode) => {
     expect(inferMode(input).mode).toBe(mode);
   });
@@ -258,6 +257,16 @@ describe("inferMode — Section 12 test matrix", () => {
   // --- Section routing (P5.5) ---
   it("show me the abstract → section(abstract)", () => {
     const r = inferMode("show me the abstract");
+    expect(r.mode).toBe("section");
+    expect(r.sectionName).toBe("abstract");
+  });
+  it("show me the summary → section(abstract)", () => {
+    const r = inferMode("show me the summary");
+    expect(r.mode).toBe("section");
+    expect(r.sectionName).toBe("abstract");
+  });
+  it("give me the overview → section(abstract)", () => {
+    const r = inferMode("give me the overview");
     expect(r.mode).toBe("section");
     expect(r.sectionName).toBe("abstract");
   });
