@@ -1,7 +1,7 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-02-19 14:46 (local)
-> Updated by: Claude Opus 4.6 — GET_EXACT_QUOTE section isolation verification
-> Session label: Verify quote isolation, fix validate regex, run e2e verification
+> Last updated: 2026-02-19 15:07 (local)
+> Updated by: Claude Opus 4.6 — Phase 4 WS-1 Unpaywall OA resolver
+> Session label: Phase 4 WS-1 implementation + GET_EXACT_QUOTE optimization
 > Staleness gate: 2026-02-19 — if today is >3 days past this,
 >   verify state before acting (see Section 3 of SeshMem schema).
 
@@ -13,7 +13,10 @@
 
 ## What Works (verified)
 - ✅ Build (`bun run build`) — 0 errors — verified 2026-02-19
-- ✅ Tests (`npx vitest run`) — 326/326 pass across 17 test files — verified 2026-02-19
+- ✅ Tests (`npx vitest run`) — 344/344 pass across 18 test files — verified 2026-02-19
+- ✅ Unpaywall OA resolver: DOI → free PDF URL via api.unpaywall.org — verified 2026-02-19
+- ✅ Unpaywall wired into ADD_URL_TO_KNOWLEDGE: DOI URLs auto-resolve to OA PDF before ingestion — verified 2026-02-19
+- ✅ Unpaywall wired into ContentResolver: fallback for unstructured HTML pages with DOIs — verified 2026-02-19
 - ✅ Build canary: plugin logs `Phase 3, built <timestamp>` on startup — verified 2026-02-17
 - ✅ ContentResolver: unified URL→text pipeline, routes on response content-type — verified 2026-02-17
 - ✅ PDF magic byte verification: dual gate (content-type + %PDF header) — verified 2026-02-17
@@ -160,18 +163,18 @@ User: URL or DOI or search query
 3. ~~Test Springer URL end-to-end~~ — DONE: 43,857 chars, 29 headings, abstract + conclusion queries work
 4. ~~Test arXiv URL → PDF extraction in live agent~~ — DONE: 39,976 chars, 6 sections detected
 5. ~~Verify GET_EXACT_QUOTE returns correct individual sections (not merged)~~ — DONE: 8/8 pass
-6. **Phase 4 WS-1: Unpaywall OA resolver** (DOI → free PDF URL)
+6. ~~Phase 4 WS-1: Unpaywall OA resolver~~ — DONE: resolveOpenAccess(), wired into action + ContentResolver
 7. **Phase 4 WS-2: Semantic Scholar discovery** (FIND_RELATED_PAPERS action)
 8. **Phase 4 WS-3: OpenAlex search** (SEARCH_PAPERS action)
 
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-02-19 | Mayakovsky | feat(phase4): WS-1 Unpaywall OA resolver — DOI→free PDF  | 327f3b8 |
 | 2026-02-19 | Mayakovsky | Optimize GET_EXACT_QUOTE: single DB fetch, pure search funct | 630eb74 |
+| 2026-02-19 | Claude Opus 4.6 | Phase 4 WS-1: Unpaywall OA resolver + GET_EXACT_QUOTE optimization | — |
 | 2026-02-19 | Claude Opus 4.6 | Fix validate regex (British acknowledgements), verify 8/8 e2e | — |
 | 2026-02-18 | Mayakovsky | Add Phase 4 roadmap: discovery layer for scientific paper AP | b8b1cac |
-| 2026-02-18 | Claude Opus 4.6 | API research + Phase 4 roadmap in heartbeat | — |
-| 2026-02-18 | Mayakovsky | Fix arXiv PDF section detection + add summary/overview alias | 2b2e114 |
 
 ## Guardrails (DO / DON'T)
 DO:

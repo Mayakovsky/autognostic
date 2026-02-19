@@ -12,6 +12,7 @@ import { HttpService } from "./httpService";
 import { WebPageProcessor, type ExtractedPage } from "./WebPageProcessor";
 import { PdfExtractor } from "./PdfExtractor";
 import { getScientificPaperDetector } from "./ScientificPaperDetector";
+import { resolveOpenAccess, extractDoiFromUrl } from "./UnpaywallResolver";
 
 export interface ResolvedContent {
   text: string;
@@ -250,6 +251,35 @@ export class ContentResolver {
             },
             diagnostics,
           };
+        }
+      }
+    }
+
+    // Unpaywall fallback: if HTML lacks structure and no PDF link succeeded, try OA resolution
+    if (!htmlHasStructure) {
+      const doi = extracted.metadata.doi || extractDoiFromUrl(resolvedUrl);
+      if (doi) {
+        diagnostics.push(`Trying Unpaywall OA resolution for DOI: ${doi}`);
+        const oaResult = await resolveOpenAccess(doi);
+        if (oaResult) {
+          diagnostics.push(`Unpaywall resolved: ${oaResult.pdfUrl} (${oaResult.oaStatus})`);
+          const pdfResult = await this.tryPdfDownload(oaResult.pdfUrl, diagnostics);
+          if (pdfResult) {
+            const text = this.truncateText(pdfResult.text, diagnostics);
+            return {
+              text,
+              contentType: "text/plain",
+              source: "pdf",
+              title: extracted.title || pdfResult.metadata.title || "",
+              resolvedUrl,
+              metadata: {
+                doi,
+                citationPdfUrl: oaResult.pdfUrl,
+                description: extracted.metadata.description || undefined,
+              },
+              diagnostics,
+            };
+          }
         }
       }
     }

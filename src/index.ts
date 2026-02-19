@@ -119,6 +119,13 @@ export {
 
 export { DatabaseSeeder } from "./services/DatabaseSeeder";
 
+// Discovery layer (Phase 4)
+export {
+  resolveOpenAccess,
+  extractDoiFromUrl,
+  type UnpaywallResult,
+} from "./services/UnpaywallResolver";
+
 // Schema types
 export type {
   StaticDetectionMetadata,

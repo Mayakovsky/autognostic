@@ -3,6 +3,7 @@ import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
 import { validateToken, isAuthEnabled } from "../auth/validateToken";
 import { randomUUID } from "crypto";
 import { getScientificPaperDetector } from "../services/ScientificPaperDetector";
+import { resolveOpenAccess, extractDoiFromUrl } from "../services/UnpaywallResolver";
 import { createScientificPaperHandler } from "../services/ScientificPaperHandler";
 import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository";
 import { wrapError, ErrorCode } from "../errors";
@@ -217,13 +218,26 @@ export const AddUrlToKnowledgeAction: Action = {
       const detector = getScientificPaperDetector();
       const isLikelyPaper = detector.isLikelyScientificPaper(url);
 
+      // Step 1b: Try Unpaywall OA resolution if we have a DOI
+      let ingestUrl = url;
+      const doi = extractDoiFromUrl(url);
+      if (doi) {
+        const oaResult = await resolveOpenAccess(doi);
+        if (oaResult) {
+          console.log(
+            `[autognostic] Unpaywall: resolved DOI ${doi} → ${oaResult.pdfUrl} (${oaResult.oaStatus}, ${oaResult.host})`
+          );
+          ingestUrl = oaResult.pdfUrl;
+        }
+      }
+
       console.log(
-        `[autognostic] Processing URL: ${url} (likely paper: ${isLikelyPaper})`
+        `[autognostic] Processing URL: ${ingestUrl} (likely paper: ${isLikelyPaper}${ingestUrl !== url ? `, OA resolved from ${url}` : ""})`
       );
 
       // Step 2: Mirror the document to get content
       const result = await mirrorDocToKnowledge(runtime, {
-        url,
+        url: ingestUrl,
         filename,
         roomId,
         entityId: runtime.agentId,
@@ -242,12 +256,12 @@ export const AddUrlToKnowledgeAction: Action = {
       // (mirrorDocToKnowledge already stored it, we need to retrieve it)
       const { AutognosticDocumentsRepository } = await import("../db/autognosticDocumentsRepository");
       const docsRepo = new AutognosticDocumentsRepository(runtime);
-      const storedDocs = await docsRepo.getByUrl(url);
+      const storedDocs = await docsRepo.getByUrl(ingestUrl);
       const content = storedDocs[0]?.content || "";
 
       // Step 4: Process through scientific paper handler
       const handlerResult = await paperHandler.process(
-        url,
+        ingestUrl,
         content,
         storedDocs[0]?.id || randomUUID()
       );
@@ -312,7 +326,8 @@ export const AddUrlToKnowledgeAction: Action = {
         success: true,
         text: responseText,
         data: safeSerialize({
-          url,
+          url: ingestUrl,
+          originalUrl: url !== ingestUrl ? url : undefined,
           filename,
           roomId,
           sourceId,
