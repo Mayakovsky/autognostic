@@ -18,6 +18,7 @@ import {
 } from "../services/SemanticScholarService";
 import { extractDoiFromUrl } from "../services/UnpaywallResolver";
 import { safeSerialize } from "../utils/safeSerialize";
+import { fromError, forCondition, formatForCallback } from "../services/ErrorMessageFactory";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -216,56 +217,73 @@ export const FindRelatedPapersAction: Action = {
 
     const limit = Math.max(1, Math.min((args.limit as number | undefined) ?? 10, 50));
 
-    // 3. Look up source paper
-    const sourcePaper = await lookupPaper(identifier);
+    try {
+      // 3. Look up source paper
+      const sourcePaper = await lookupPaper(identifier);
 
-    if (!sourcePaper) {
-      const text = `Could not find paper "${identifier}" on Semantic Scholar. Check the identifier and try again.`;
+      if (!sourcePaper) {
+        const userMsg = forCondition("semantic_scholar_404", { identifier });
+        const text = formatForCallback(userMsg);
+        if (callback) await callback({ text, action: "FIND_RELATED_PAPERS" });
+        return { success: false, text, data: safeSerialize({ error: "paper_not_found", identifier }) };
+      }
+
+      // 4. Fetch related/citing/referenced papers
+      let papers: S2Paper[];
+      switch (mode) {
+        case "citations":
+          papers = await getCitations(sourcePaper.paperId, limit);
+          break;
+        case "references":
+          papers = await getReferences(sourcePaper.paperId, limit);
+          break;
+        default:
+          papers = await getRelatedPapers(sourcePaper.paperId, limit);
+      }
+
+      // 5. Format response
+      const sourceInfo = `Source: **${sourcePaper.title}**${sourcePaper.year ? ` (${sourcePaper.year})` : ""} [${sourcePaper.citationCount} citations]\n\n`;
+      const listText = formatPaperList(papers, mode);
+      const responseText = sourceInfo + listText;
+
+      if (callback) await callback({ text: responseText, action: "FIND_RELATED_PAPERS" });
+      return {
+        success: true,
+        text: responseText,
+        data: safeSerialize({
+          sourcePaper: {
+            paperId: sourcePaper.paperId,
+            title: sourcePaper.title,
+            doi: sourcePaper.externalIds.DOI || null,
+            year: sourcePaper.year,
+            citationCount: sourcePaper.citationCount,
+          },
+          mode,
+          count: papers.length,
+          papers: papers.map(p => ({
+            paperId: p.paperId,
+            title: p.title,
+            year: p.year,
+            doi: p.externalIds.DOI || null,
+            openAccessPdfUrl: p.openAccessPdfUrl,
+            citationCount: p.citationCount,
+          })),
+        }),
+      };
+    } catch (error) {
+      const userMsg = fromError(error, { identifier });
+      const text = formatForCallback(userMsg);
       if (callback) await callback({ text, action: "FIND_RELATED_PAPERS" });
-      return { success: false, text, data: safeSerialize({ error: "paper_not_found", identifier }) };
+      return {
+        success: false,
+        text,
+        data: safeSerialize({
+          error: "discovery_failed",
+          identifier,
+          isRetryable: userMsg.isRetryable,
+          debugInfo: userMsg.debugInfo,
+        }),
+      };
     }
-
-    // 4. Fetch related/citing/referenced papers
-    let papers: S2Paper[];
-    switch (mode) {
-      case "citations":
-        papers = await getCitations(sourcePaper.paperId, limit);
-        break;
-      case "references":
-        papers = await getReferences(sourcePaper.paperId, limit);
-        break;
-      default:
-        papers = await getRelatedPapers(sourcePaper.paperId, limit);
-    }
-
-    // 5. Format response
-    const sourceInfo = `Source: **${sourcePaper.title}**${sourcePaper.year ? ` (${sourcePaper.year})` : ""} [${sourcePaper.citationCount} citations]\n\n`;
-    const listText = formatPaperList(papers, mode);
-    const responseText = sourceInfo + listText;
-
-    if (callback) await callback({ text: responseText, action: "FIND_RELATED_PAPERS" });
-    return {
-      success: true,
-      text: responseText,
-      data: safeSerialize({
-        sourcePaper: {
-          paperId: sourcePaper.paperId,
-          title: sourcePaper.title,
-          doi: sourcePaper.externalIds.DOI || null,
-          year: sourcePaper.year,
-          citationCount: sourcePaper.citationCount,
-        },
-        mode,
-        count: papers.length,
-        papers: papers.map(p => ({
-          paperId: p.paperId,
-          title: p.title,
-          year: p.year,
-          doi: p.externalIds.DOI || null,
-          openAccessPdfUrl: p.openAccessPdfUrl,
-          citationCount: p.citationCount,
-        })),
-      }),
-    };
   },
 };

@@ -14,6 +14,7 @@ import {
   type SearchOptions,
 } from "../services/OpenAlexService";
 import { safeSerialize } from "../utils/safeSerialize";
+import { fromError, forCondition, formatForCallback } from "../services/ErrorMessageFactory";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -230,53 +231,70 @@ export const SearchPapersAction: Action = {
     // 2. Parse filter/sort options
     const options = parseOptions(messageText, args);
 
-    // 3. Search OpenAlex
-    const results = await searchWorks(query, options);
+    try {
+      // 3. Search OpenAlex
+      const results = await searchWorks(query, options);
 
-    // 4. Format response
-    const listText = formatResultList(results);
-    const filterDesc: string[] = [];
-    if (options.filterOA) filterDesc.push("open-access only");
-    if (options.yearFrom) filterDesc.push(`from ${options.yearFrom}`);
-    if (options.yearTo) filterDesc.push(`until ${options.yearTo}`);
-    if (options.sortBy === "cited_by_count") filterDesc.push("sorted by citations");
-    if (options.sortBy === "publication_date") filterDesc.push("sorted by date");
+      // 4. Format response
+      const listText = formatResultList(results);
+      const filterDesc: string[] = [];
+      if (options.filterOA) filterDesc.push("open-access only");
+      if (options.yearFrom) filterDesc.push(`from ${options.yearFrom}`);
+      if (options.yearTo) filterDesc.push(`until ${options.yearTo}`);
+      if (options.sortBy === "cited_by_count") filterDesc.push("sorted by citations");
+      if (options.sortBy === "publication_date") filterDesc.push("sorted by date");
 
-    const filterStr = filterDesc.length > 0 ? ` (${filterDesc.join(", ")})` : "";
+      const filterStr = filterDesc.length > 0 ? ` (${filterDesc.join(", ")})` : "";
 
-    let responseText: string;
-    if (results.length === 0) {
-      responseText = `No papers found for "${query}"${filterStr}. Try broadening your search or adjusting filters.`;
-    } else {
-      responseText =
-        `Found ${results.length} papers on "${query}"${filterStr}:\n\n${listText}` +
-        `\n\nReply with the numbers you'd like to add to knowledge (e.g., "add 1, 3, 5") or say "add all".`;
+      let responseText: string;
+      if (results.length === 0) {
+        const userMsg = forCondition("openalex_empty", { query });
+        responseText = formatForCallback(userMsg);
+      } else {
+        responseText =
+          `Found ${results.length} papers on "${query}"${filterStr}:\n\n${listText}` +
+          `\n\nReply with the numbers you'd like to add to knowledge (e.g., "add 1, 3, 5") or say "add all".`;
+      }
+
+      if (callback) await callback({ text: responseText, action: "SEARCH_PAPERS" });
+      return {
+        success: results.length > 0,
+        text: responseText,
+        data: safeSerialize({
+          query,
+          options: {
+            limit: options.limit ?? 10,
+            filterOA: options.filterOA ?? false,
+            yearFrom: options.yearFrom ?? null,
+            yearTo: options.yearTo ?? null,
+            sortBy: options.sortBy ?? "relevance",
+          },
+          count: results.length,
+          results: results.map(r => ({
+            id: r.id,
+            doi: r.doi,
+            title: r.title,
+            year: r.year,
+            citedByCount: r.citedByCount,
+            oaStatus: r.oaStatus,
+            oaPdfUrl: r.oaPdfUrl,
+          })),
+        }),
+      };
+    } catch (error) {
+      const userMsg = fromError(error, { query });
+      const text = formatForCallback(userMsg);
+      if (callback) await callback({ text, action: "SEARCH_PAPERS" });
+      return {
+        success: false,
+        text,
+        data: safeSerialize({
+          error: "search_failed",
+          query,
+          isRetryable: userMsg.isRetryable,
+          debugInfo: userMsg.debugInfo,
+        }),
+      };
     }
-
-    if (callback) await callback({ text: responseText, action: "SEARCH_PAPERS" });
-    return {
-      success: true,
-      text: responseText,
-      data: safeSerialize({
-        query,
-        options: {
-          limit: options.limit ?? 10,
-          filterOA: options.filterOA ?? false,
-          yearFrom: options.yearFrom ?? null,
-          yearTo: options.yearTo ?? null,
-          sortBy: options.sortBy ?? "relevance",
-        },
-        count: results.length,
-        results: results.map(r => ({
-          id: r.id,
-          doi: r.doi,
-          title: r.title,
-          year: r.year,
-          citedByCount: r.citedByCount,
-          oaStatus: r.oaStatus,
-          oaPdfUrl: r.oaPdfUrl,
-        })),
-      }),
-    };
   },
 };

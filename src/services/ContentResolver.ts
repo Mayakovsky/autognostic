@@ -13,6 +13,8 @@ import { WebPageProcessor, type ExtractedPage } from "./WebPageProcessor";
 import { PdfExtractor } from "./PdfExtractor";
 import { getScientificPaperDetector } from "./ScientificPaperDetector";
 import { resolveOpenAccess, extractDoiFromUrl } from "./UnpaywallResolver";
+import { ContentResolverError } from "../errors/ContentResolverError";
+import { ErrorCode } from "../errors/AutognosticError";
 
 export interface ResolvedContent {
   text: string;
@@ -218,12 +220,17 @@ export class ContentResolver {
     diagnostics.push(`Accept header: ${acceptHeader}`);
 
     // Fetch the URL
-    const res = await this.http.get(resolvedUrl, {
-      headers: { Accept: acceptHeader },
-    });
+    let res: Response;
+    try {
+      res = await this.http.get(resolvedUrl, {
+        headers: { Accept: acceptHeader },
+      });
+    } catch (fetchError) {
+      throw classifyFetchError(fetchError, resolvedUrl);
+    }
 
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status} (${res.statusText}) for ${resolvedUrl}`);
+      throw classifyHttpError(res.status, resolvedUrl);
     }
 
     const responseContentType = res.headers.get("content-type") || "";
@@ -560,6 +567,54 @@ export function isPdfBytes(data: Uint8Array): boolean {
     data[2] === 0x44 && // D
     data[3] === 0x46 && // F
     data[4] === 0x2d    // -
+  );
+}
+
+/**
+ * Classify a fetch-level error (DNS, timeout, connection refused) into a ContentResolverError.
+ */
+function classifyFetchError(error: unknown, url: string): ContentResolverError {
+  const cause = error instanceof Error ? error : new Error(String(error));
+  const msg = cause.message.toLowerCase();
+  const name = cause.name.toLowerCase();
+
+  if (name === "aborterror" || msg.includes("timeout") || msg.includes("etimedout") || msg.includes("abort")) {
+    return ContentResolverError.timeout(url, cause, { operation: "content_resolve" });
+  }
+
+  if (msg.includes("enotfound") || msg.includes("econnrefused") || msg.includes("econnreset")) {
+    let hostname = "";
+    try { hostname = new URL(url).hostname; } catch { hostname = url; }
+    return ContentResolverError.dnsFailure(url, hostname, cause, { operation: "content_resolve" });
+  }
+
+  // Generic network failure — wrap as unknown content error
+  return new ContentResolverError(
+    cause.message,
+    "unknown",
+    ErrorCode.CONTENT_EMPTY,
+    { operation: "content_resolve", url },
+    { cause, isRetryable: true }
+  );
+}
+
+/**
+ * Classify an HTTP status error into a ContentResolverError.
+ */
+function classifyHttpError(status: number, url: string): ContentResolverError {
+  if (status === 429) {
+    return ContentResolverError.rateLimited(url, { operation: "content_resolve" });
+  }
+  if (status === 401 || status === 403) {
+    return ContentResolverError.paywall(url, status, { operation: "content_resolve" });
+  }
+  // Other HTTP errors — generic
+  return new ContentResolverError(
+    `HTTP ${status} for ${url}`,
+    "unknown",
+    ErrorCode.CONTENT_EMPTY,
+    { operation: "content_resolve", url, statusCode: status },
+    { isRetryable: status >= 500 }
   );
 }
 

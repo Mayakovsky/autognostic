@@ -9,6 +9,7 @@ import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository
 import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
 import { wrapError, ErrorCode } from "../errors";
 import { safeSerialize } from "../utils/safeSerialize";
+import { fromError, forCondition, formatForCallback } from "../services/ErrorMessageFactory";
 
 // Extract URL from message text
 // Supports both full URLs (https://example.com/...) and bare hostnames (example.com/...)
@@ -196,7 +197,8 @@ export const AddUrlToKnowledgeAction: Action = {
     const url = (args.url as string | undefined) || extractUrlFromText(messageText);
 
     if (!url) {
-      const text = "No URL found. Please provide a URL to add to knowledge.";
+      const userMsg = forCondition("url_not_found");
+      const text = formatForCallback(userMsg);
       if (callback) await callback({ text, action: "ADD_URL_TO_KNOWLEDGE" });
       return {
         success: false,
@@ -412,20 +414,17 @@ export const AddUrlToKnowledgeAction: Action = {
         }),
       };
     } catch (error) {
-      const wrappedError = wrapError(error, ErrorCode.INTERNAL, {
-        operation: "ADD_URL_TO_KNOWLEDGE",
-        url,
-      });
-      const errorText = `Failed to add document: ${wrappedError.toUserMessage()}`;
+      const userMsg = fromError(error, { url });
+      const errorText = formatForCallback(userMsg);
       if (callback) await callback({ text: errorText, action: "ADD_URL_TO_KNOWLEDGE" });
       return {
         success: false,
         text: errorText,
         data: safeSerialize({
           error: "ingestion_failed",
-          code: wrappedError.code,
-          details: wrappedError.message,
-          isRetryable: wrappedError.isRetryable,
+          summary: userMsg.summary,
+          isRetryable: userMsg.isRetryable,
+          debugInfo: userMsg.debugInfo,
         }),
       };
     }

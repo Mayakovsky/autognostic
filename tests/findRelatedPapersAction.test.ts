@@ -241,7 +241,7 @@ describe("FindRelatedPapersAction", () => {
       expect(callback).toHaveBeenCalledOnce();
       const ar = result as { success: boolean; text: string };
       expect(ar.success).toBe(false);
-      expect(ar.text).toContain("Could not find");
+      expect(ar.text).toContain("wasn't found in Semantic Scholar");
     });
 
     it("should handle empty results gracefully", async () => {

@@ -294,8 +294,8 @@ describe("SearchPapersAction", () => {
 
       expect(callback).toHaveBeenCalledOnce();
       const ar = result as { success: boolean; text: string };
-      expect(ar.success).toBe(true);
-      expect(ar.text).toContain("No papers found");
+      expect(ar.success).toBe(false);
+      expect(ar.text).toContain("No papers matched");
     });
 
     it("should fail gracefully when no query extractable", async () => {

@@ -13,6 +13,7 @@ export { AutognosticDatabaseError } from "./DatabaseError";
 export { AutognosticValidationError } from "./ValidationError";
 export { AutognosticClassificationError } from "./ClassificationError";
 export { AutognosticStorageError } from "./StorageError";
+export { ContentResolverError, type ContentFailureType } from "./ContentResolverError";
 
 // Re-export existing auth error for consistency
 export { AutognosticAuthError } from "../auth/validateToken";
