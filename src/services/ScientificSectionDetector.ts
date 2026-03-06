@@ -54,6 +54,7 @@ const CANONICAL: Record<string, string> = {
   "results and discussion": "results",
   "supplementary material": "supplementary",
   "supplementary materials": "supplementary",
+  "supporting information": "supplementary",
   summary: "abstract",
   overview: "abstract",
 };
@@ -146,12 +147,21 @@ export function detectSections(text: string): SectionProfile {
   // Filter out false headings that appear after references/bibliography.
   // Reference lists often contain book/paper titles that match section names
   // (e.g., "Introduction to Bootstrap" split across lines → standalone "Introduction").
+  // BUT keep appendix/supplementary/acknowledgments — they legitimately follow references.
+  const POST_REFS_ALLOWED = new Set(["appendix", "supplementary", "acknowledgments"]);
   const refsIdx = headings.findIndex(
     (h) => h.canonical === "references" || h.canonical === "bibliography"
   );
   if (refsIdx >= 0) {
-    // Keep references heading, remove everything after it
-    headings.splice(refsIdx + 1);
+    // Remove headings after references EXCEPT allowed post-references sections
+    const toKeep = headings.slice(0, refsIdx + 1);
+    for (let i = refsIdx + 1; i < headings.length; i++) {
+      if (POST_REFS_ALLOWED.has(headings[i].canonical)) {
+        toKeep.push(headings[i]);
+      }
+    }
+    headings.length = 0;
+    headings.push(...toKeep);
   }
 
   // Build sections from headings

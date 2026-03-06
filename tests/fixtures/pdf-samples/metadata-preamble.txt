@@ -1,0 +1,60 @@
+Journal of Machine Learning Research 25 (2024) 1-34 Submitted 06/23; Revised 11/23; Published 01/24
+Vol. 25, No. 3, pp. 1-34
+ISSN 1533-7928
+© 2024 The Authors. Licensed under CC BY 4.0.
+All rights reserved.
+
+Efficient Transformers: A Survey of Recent Advances
+
+Albert Chen∗ albert@stanford.edu
+Department of Computer Science
+Stanford University
+Stanford, CA 94305
+
+Sarah Johnson∗ sarahj@mit.edu
+CSAIL
+Massachusetts Institute of Technology
+Cambridge, MA 02139
+
+∗Equal contribution
+
+Editor: Yoshua Bengio
+
+Abstract
+
+We survey recent advances in efficient transformer architectures. Standard
+transformers have quadratic complexity in sequence length, limiting their
+applicability to long documents and high-resolution images. We categorize
+efficient methods into sparse attention, low-rank approximation, kernel-based,
+and memory-based approaches, analyzing their trade-offs between computational
+efficiency and model quality.
+
+1 Introduction
+
+The transformer architecture has revolutionized natural language processing
+and beyond. Originally proposed by Vaswani et al. (2017), transformers
+use self-attention mechanisms that enable parallel processing of sequences.
+However, the quadratic computational and memory complexity of standard
+self-attention poses challenges for long sequences.
+
+2 Methods
+
+We classify efficient transformer methods along four axes: attention pattern
+modification, mathematical approximation of attention, architectural changes,
+and training-time optimization.
+
+3 Results
+
+Our experimental comparison shows that sparse attention methods maintain
+95-98% of full attention quality while reducing FLOPs by 60-80%.
+
+4 Conclusion
+
+Efficient transformers represent a rapidly evolving field with significant
+practical impact. We recommend practitioners consider the specific trade-offs
+relevant to their use case when selecting an approach.
+
+References
+
+[1] Vaswani et al. (2017). Attention Is All You Need. NeurIPS.
+[2] Kitaev et al. (2020). Reformer. ICLR.

@@ -1,5 +1,5 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-03-06 16:37 (local)
+> Last updated: 2026-03-06 17:23 (local)
 > Updated by: Claude Opus 4.6 — Phase 4 WS-3 OpenAlex search
 > Session label: Phase 4 WS-3 implementation — SEARCH_PAPERS action
 > Staleness gate: 2026-03-06 — if today is >3 days past this,
@@ -170,16 +170,20 @@ User: URL or DOI or search query
 6. ~~Phase 4 WS-1: Unpaywall OA resolver~~ — DONE: resolveOpenAccess(), wired into action + ContentResolver
 7. ~~Phase 4 WS-2: Semantic Scholar discovery~~ — DONE: SemanticScholarService + FIND_RELATED_PAPERS action
 8. ~~Phase 4 WS-3: OpenAlex search~~ — DONE: OpenAlexService + SEARCH_PAPERS action
-9. **Phase 4 WS-4 (stretch): Europe PMC Full Text** (if needed for biomedical content)
+9. **Hardening WS-1: PDF Robustness** — see HARDENING-WS1-PDF-ROBUSTNESS.md
+10. **Hardening WS-2: Error UX** — see HARDENING-WS2-ERROR-UX.md
+11. **Hardening WS-3: Rate Limiting & Caching** — see HARDENING-WS3-RATE-LIMIT-CACHE.md
+12. Manual e2e testing round (post-hardening)
+13. v1 release prep
 
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-03-06 | Mayakovsky | fix: PDF robustness — figure/table guards, preamble skip,  | ed11f36 |
 | 2026-03-06 | Mayakovsky | feat: copyright license gate — block full-text ingestion o | 1672e6c |
 | 2026-03-06 | Mayakovsky | feat(phase4): WS-3 OpenAlex search — SEARCH_PAPERS action | 8a78a5a |
 | 2026-03-06 | Claude Opus 4.6 | Phase 4 WS-3: OpenAlex search — SEARCH_PAPERS action (57 new tests) | — |
 | 2026-02-19 | Mayakovsky | feat(phase4): WS-2 Semantic Scholar discovery — FIND_RELAT | 3e087a8 |
-| 2026-02-19 | Claude Opus 4.6 | Phase 4 WS-2: Semantic Scholar discovery — FIND_RELATED_PAPERS action | — |
 
 ## Guardrails (DO / DON'T)
 DO:

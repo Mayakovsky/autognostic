@@ -49,6 +49,9 @@ export interface DocumentProfile {
   avgWordsPerSentence: number;
   avgSentencesPerParagraph: number;
 
+  // Table-data diagnostics
+  tableRowsSkipped?: number; // paragraphs excluded from count (>70% non-alpha chars)
+
   // Computed at analysis time
   analyzedAt: string;       // ISO timestamp
   analyzerVersion: string;  // "1.0" — for future migration

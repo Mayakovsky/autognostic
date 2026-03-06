@@ -1,0 +1,41 @@
+Neural Architecture Search for Edge Devices
+
+Abstract
+
+We present an efficient neural architecture search method optimized for
+deployment on edge devices with limited computational resources.
+
+1 Introduction
+
+Edge computing requires models that balance accuracy with inference speed.
+Figure 1. Overview of our NAS pipeline showing the search space, controller,
+and evaluation stages. The controller generates candidate architectures that
+are evaluated on a proxy task before full training.
+
+Our approach builds on differentiable NAS methods but introduces novel
+constraints for memory-bounded search. Fig. 2 illustrates the memory
+profiling component that guides architecture selection.
+
+2 Methods
+
+The search space includes standard convolution, depthwise separable
+convolution, and squeeze-and-excite blocks. Table 1. Search space
+dimensions and ranges for each operation type. We define the search
+space as a directed acyclic graph with variable depth.
+
+Figure 3: Comparison of search efficiency between our method and baseline
+approaches. Our method converges 3.5x faster while finding architectures
+with comparable accuracy. Tab. 1 summarizes the latency measurements.
+
+3 Results
+
+Our discovered architectures achieve 76.3% top-1 accuracy on ImageNet
+while requiring only 2.1M parameters. Figure 4. Pareto frontier of
+accuracy vs. latency for discovered architectures compared to manually
+designed networks. Table 2: Detailed accuracy comparison across different
+hardware platforms including Raspberry Pi 4, Jetson Nano, and Pixel 6.
+
+4 Conclusion
+
+We have demonstrated that hardware-aware NAS can discover efficient
+architectures for edge deployment. Fig. 5 shows deployment results.

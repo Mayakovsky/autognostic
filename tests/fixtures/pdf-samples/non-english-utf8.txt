@@ -1,0 +1,45 @@
+Analyse des Réseaux Neuronaux Profonds
+pour la Détection d'Anomalies
+
+Hans Müller1, François Léger2, María García3
+1Technische Universität München
+2Université Paris-Saclay
+3Universidad de Barcelona
+
+Abstract
+
+Nous présentons une analyse détaillée des méthodes d'apprentissage profond
+appliquées à la détection d'anomalies dans les systèmes industriels. Les
+résultats montrent une amélioration significative par rapport aux méthodes
+traditionnelles basées sur des règles.
+
+1 Introduction
+
+La détection d'anomalies est un problème fondamental en apprentissage automatique.
+Les approches classiques, telles que les forêts d'isolement et les machines
+à vecteurs de support, présentent des limitations face aux données de haute
+dimensionnalité. Die Erkennung von Anomalien in industriellen Prozessen
+erfordert robuste und skalierbare Methoden.
+
+2 Méthodologie
+
+Nous utilisons un réseau de neurones convolutif avec des couches d'attention.
+L'architecture comprend un encodeur-décodeur avec des connexions résiduelles.
+La función de pérdida combina la reconstrucción con la regularización.
+
+3 Résultats
+
+Les expériences montrent que notre méthode atteint une précision de 94.7%
+sur le jeu de données MNIST-Anomaly. Die Ergebnisse auf dem MVTec-Datensatz
+zeigen eine Verbesserung von 3.2% gegenüber dem Stand der Technik.
+
+4 Conclusion
+
+Notre approche démontre l'efficacité des réseaux profonds pour la détection
+d'anomalies multi-domaines. Zukünftige Arbeiten werden sich auf die
+Erweiterung auf unüberwachte Szenarien konzentrieren.
+
+References
+
+[1] Müller, H. et al. (2024). Anomalieerkennung mit tiefen Netzwerken.
+[2] Léger, F. (2023). Apprentissage profond pour l'industrie.

@@ -355,6 +355,17 @@ function capArray<T extends { index: number }>(arr: T[], max: number): T[] {
 }
 
 /**
+ * Check if a paragraph's text is table data (>70% non-alpha characters).
+ * Table data blocks consist mostly of digits, pipes, tabs, dashes, and delimiters.
+ */
+function isTableDataBlock(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 5) return false;
+  const alphaCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
+  return alphaCount / trimmed.length < 0.3;
+}
+
+/**
  * Analyze a document and produce its structural profile.
  *
  * Pure function — no side effects, no database, no runtime.
@@ -371,8 +382,15 @@ export function analyzeDocument(text: string): DocumentProfile {
   // Wire sentences to paragraphs
   wireSentencesToParagraphs(paragraphs, sentences);
 
+  // Count table-data paragraphs (excluded from paragraph count)
+  let tableRowsSkipped = 0;
+  for (const para of paragraphs) {
+    const paraText = text.substring(para.start, para.end);
+    if (isTableDataBlock(paraText)) tableRowsSkipped++;
+  }
+
   const sentenceCount = sentences.length;
-  const paragraphCount = paragraphs.length;
+  const paragraphCount = paragraphs.length - tableRowsSkipped;
 
   const firstSentence = sentences.length > 0 ? sentences[0].text : "";
   const lastSentence = sentences.length > 0 ? sentences[sentences.length - 1].text : "";
@@ -399,6 +417,8 @@ export function analyzeDocument(text: string): DocumentProfile {
     lastSentence,
     avgWordsPerSentence,
     avgSentencesPerParagraph,
+
+    tableRowsSkipped: tableRowsSkipped > 0 ? tableRowsSkipped : undefined,
 
     analyzedAt: new Date().toISOString(),
     analyzerVersion: "1.0",

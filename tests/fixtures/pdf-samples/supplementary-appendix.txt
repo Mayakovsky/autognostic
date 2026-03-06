@@ -1,0 +1,75 @@
+Protein Folding Dynamics in Aqueous Solutions
+
+Abstract
+
+We investigate the folding dynamics of small globular proteins using molecular
+dynamics simulations. Our results reveal previously uncharacterized intermediate
+states in the folding pathway of ubiquitin.
+
+1 Introduction
+
+Protein folding remains one of the grand challenges in molecular biology. Despite
+recent advances with AlphaFold2, the kinetic pathways of folding are not fully
+understood.
+
+2 Methods
+
+All-atom molecular dynamics simulations were performed using GROMACS 2023.
+The CHARMM36m force field was employed with TIP3P water model. Simulations
+were run for 10 microseconds each at 300K and 350K.
+
+3 Results
+
+Three distinct intermediate states were identified along the folding pathway.
+The first intermediate (I1) forms within 500 nanoseconds and involves
+partial formation of the alpha helix. See Figure 1 for the energy landscape.
+
+4 Discussion
+
+Our findings suggest a hierarchical folding mechanism consistent with the
+framework model. The intermediate states observed here may be relevant
+to understanding misfolding diseases.
+
+5 Conclusion
+
+We have characterized the folding pathway of ubiquitin with unprecedented
+temporal resolution. These results provide a foundation for rational drug design
+targeting folding intermediates.
+
+Acknowledgments
+
+This work was supported by NIH grant R01-GM123456. Computational resources
+were provided by XSEDE allocation BIO210001.
+
+References
+
+[1] Jumper, J. et al. (2021). Nature, 596, 583-589.
+[2] Shaw, D.E. et al. (2010). Science, 330, 341-346.
+
+Appendix A: Simulation Parameters
+
+Force field: CHARMM36m
+Water model: TIP3P
+Box size: 7.0 nm cubic
+Ion concentration: 150 mM NaCl
+Temperature: 300K, 350K
+Pressure: 1 bar (Parrinello-Rahman)
+Time step: 2 fs
+PME cutoff: 1.2 nm
+
+Appendix B: Additional Figures
+
+Table S1: RMSD values for all simulation replicas
+Replica  Temp(K)  RMSD_avg(nm)  RMSD_std(nm)  Frames
+1        300      0.234         0.045         50000
+2        300      0.251         0.052         50000
+3        300      0.228         0.041         50000
+4        350      0.312         0.067         50000
+5        350      0.298         0.058         50000
+
+Supporting Information
+
+Additional analysis including contact maps, secondary structure timelines,
+and free energy surfaces are available in the online Supporting Information.
+Hydrogen bond analysis and solvent accessible surface area calculations
+are also provided.

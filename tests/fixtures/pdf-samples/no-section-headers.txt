@@ -1,0 +1,28 @@
+The relationship between artificial intelligence and human creativity has been
+the subject of intense debate in recent years. As language models become
+increasingly capable of generating text, images, and music, questions arise
+about the nature of creativity itself.
+
+Some scholars argue that true creativity requires consciousness and intentionality,
+qualities that current AI systems lack. They point to the fact that AI models
+merely recombine patterns from their training data, producing outputs that are
+statistically likely rather than genuinely novel.
+
+Others counter that human creativity operates on similar principles. Our brains
+are pattern recognition and combination machines, drawing on vast stores of
+experience to produce new ideas. The difference, they argue, is one of degree
+rather than kind.
+
+A middle ground suggests that AI tools are best understood as creativity
+amplifiers rather than creativity replacements. A skilled artist using AI tools
+can explore design spaces more rapidly, iterate on ideas more efficiently, and
+discover unexpected combinations that might not occur through traditional methods.
+
+The economic implications are also significant. Industries from advertising to
+architecture are beginning to integrate AI creative tools into their workflows.
+This raises questions about intellectual property, attribution, and the value
+of human artistic labor.
+
+Ultimately, the relationship between AI and creativity will likely evolve as
+the technology matures. Rather than replacing human creativity, AI may expand
+our understanding of what creativity means and how it can be practiced.

@@ -1,0 +1,52 @@
+Deep Learning for Climate
+Prediction: A Survey
+John Smith1, Jane Doe2
+1MIT 2Stanford
+Abstract We present a comprehensive
+survey of deep learning methods
+applied to climate prediction tasks.
+Recent advances in neural networks
+have enabled significant progress in
+weather forecasting and long-term
+climate modeling.
+1 Introduction Climate change is
+one of the most pressing challenges
+facing humanity today. Traditional
+numerical weather prediction (NWP)
+models require enormous computational
+resources. Machine learning offers
+promising alternatives that can
+complement existing approaches.
+Recent work by Chen et al. (2023)
+demonstrated that transformer-based
+architectures can achieve comparable
+accuracy to NWP models while
+reducing inference time by orders
+of magnitude. However, challenges
+remain in handling the inherent
+multi-scale nature of atmospheric
+dynamics.
+2 Related Work Several groups have
+explored neural approaches to weather
+prediction. Pathak et al. (2022)
+introduced FourCastNet, a Fourier
+neural operator-based model. Lam
+et al. (2023) presented GraphCast,
+achieving state-of-the-art results.
+3 Methods We propose a hybrid
+architecture combining convolutional
+and attention mechanisms. Our model
+operates on a latitude-longitude
+grid with 0.25 degree resolution.
+4 Results Our model achieves
+a RMSE of 0.42 on the ERA5
+benchmark dataset. Table 1 shows
+detailed results across variables.
+5 Conclusion We have shown that
+deep learning methods can effectively
+model climate dynamics. Future work
+will explore ensemble approaches.
+References
+[1] Chen et al., 2023. Pangu-Weather.
+[2] Pathak et al., 2022. FourCastNet.
+[3] Lam et al., 2023. GraphCast.

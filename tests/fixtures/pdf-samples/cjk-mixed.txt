@@ -1,0 +1,39 @@
+Multilingual Sentiment Analysis using Cross-lingual Transfer Learning
+多言語感情分析のためのクロスリンガル転移学習
+
+Abstract
+
+We propose a cross-lingual sentiment analysis framework that leverages
+multilingual pre-trained models. Our method achieves strong performance
+across English, Chinese (中文), Japanese (日本語), and Korean (한국어).
+
+1 Introduction
+
+Sentiment analysis is a fundamental NLP task with broad applications.
+自然言語処理における感情分析は、ソーシャルメディア分析やカスタマーレビュー
+の理解に広く応用されています。While English sentiment analysis has
+been extensively studied, multilingual approaches remain challenging.
+
+中国語の感情分析には、語彙の曖昧さや文脈依存性という固有の課題があります。
+The lack of word boundaries in Chinese and Japanese text requires
+specialized tokenization strategies.
+
+2 Methods
+
+We fine-tune XLM-RoBERTa on a combined dataset of reviews in four
+languages. 多言語BERTモデルを使用して、言語間の知識転移を実現します。
+
+3 Results
+
+Our model achieves the following F1 scores:
+English: 0.923, 中文: 0.891, 日本語: 0.887, 한국어: 0.879
+
+4 Conclusion
+
+Cross-lingual transfer learning enables effective multilingual sentiment
+analysis. 今後の研究では、低リソース言語への拡張を検討します。
+
+References
+
+[1] Conneau et al. (2020). XLM-RoBERTa. ACL.
+[2] 田中太郎 et al. (2023). 日本語感情分析の最新動向.

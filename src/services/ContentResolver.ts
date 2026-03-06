@@ -36,10 +36,82 @@ const MAX_TEXT_LENGTH = 500_000;
  * Order matters: longer names first to avoid partial matches.
  */
 const SECTION_NAMES_RE =
-  "Materials and Methods|Results and Discussion|Literature Review|Related Works?" +
+  "Supporting Information|Materials and Methods|Results and Discussion|Literature Review|Related Works?" +
   "|Supplementary Materials?|Acknowledgements?|Acknowledgments?" +
   "|Introduction|Background|Methodology|Bibliography|Conclusions?" +
   "|Discussion|References|Appendix|Methods?|Results?|Abstract|Keywords";
+
+/** Regex to detect figure/table caption references (e.g., "Figure 1.", "Fig. 2", "Table 3.") */
+const FIG_TABLE_RE = /(?:Fig(?:ure)?|Tab(?:le)?)\s+\d+$/i;
+
+/**
+ * Find the character offset where real content starts, past any metadata preamble.
+ * Detects journal metadata (copyright, ISSN, Vol/No/pp) that should not
+ * interfere with section header detection.
+ * Does NOT delete preamble — just identifies the boundary.
+ */
+export function findContentStart(text: string): number {
+  const lines = text.split("\n");
+  let lastPreambleLine = -1;
+
+  // Only scan the first 50 lines (preamble is at the top)
+  const scanLimit = Math.min(lines.length, 50);
+  for (let i = 0; i < scanLimit; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    if (
+      line.includes("\u00A9") || // © (unicode)
+      line.includes("©") ||
+      /\bCopyright\b/i.test(line) ||
+      /\bLicensed under\b/i.test(line) ||
+      /\bAll rights reserved\b/i.test(line) ||
+      /\bVol\.\s*\d+/i.test(line) ||
+      /\bNo\.\s*\d+,?\s*pp\b/i.test(line) ||
+      /\bpp\.\s*\d+\s*[-–]\s*\d+/i.test(line) ||
+      /\bISSN\b/i.test(line) ||
+      /\bISBN\b/i.test(line)
+    ) {
+      lastPreambleLine = i;
+    }
+  }
+
+  if (lastPreambleLine < 0) return 0;
+
+  // Return char offset of the line after the last preamble line
+  let offset = 0;
+  for (let i = 0; i <= lastPreambleLine; i++) {
+    offset += lines[i].length + 1; // +1 for newline
+  }
+  return offset;
+}
+
+/**
+ * Detect possible double-column layout from line length distribution.
+ * Returns true if median non-empty line length is < 40 chars,
+ * which suggests interleaved columns from PDF extraction.
+ */
+export function detectDoubleColumnLayout(text: string): boolean {
+  const lines = text.split("\n").filter(l => l.trim().length > 0);
+  if (lines.length < 10) return false;
+
+  const lengths = lines.map(l => l.trim().length).sort((a, b) => a - b);
+  const median = lengths[Math.floor(lengths.length / 2)];
+  return median < 40;
+}
+
+/**
+ * Check if text around a given offset looks like table data.
+ * Table data has >70% non-alpha characters (digits, pipes, tabs, dashes).
+ */
+function isTableDataContext(text: string, offset: number): boolean {
+  const start = Math.max(0, offset - 40);
+  const end = Math.min(text.length, offset + 40);
+  const context = text.substring(start, end);
+  if (context.length < 10) return false;
+  const alphaCount = (context.match(/[a-zA-Z]/g) || []).length;
+  return alphaCount / context.length < 0.3;
+}
 
 /**
  * Normalize flat PDF text by re-inserting line breaks.
@@ -53,57 +125,67 @@ export function normalizePdfText(text: string): string {
   // If text already has reasonable line structure (at least 1 line per 500 chars), leave it
   if (text.length > 500 && lineCount > text.length / 500) return text;
 
-  let result = text;
+  // Find content start (past copyright/journal metadata preamble)
+  const contentStart = findContentStart(text);
+  const preamble = text.substring(0, contentStart);
+  let content = text.substring(contentStart);
+
+  // Apply section header patterns only to content (not preamble)
 
   // Pattern 1: Section name followed by colon (e.g., "Background: text...")
-  // Insert \n\n before and \n after so the header is on its own line
   const colonRe = new RegExp(
     `(\\s)(${SECTION_NAMES_RE})(\\s*:)`,
     "gi"
   );
-  result = result.replace(colonRe, "$1\n\n$2$3\n");
+  content = content.replace(colonRe, "$1\n\n$2$3\n");
 
   // Pattern 2: Section name after sentence-ending punctuation (e.g., "...results. Methods We...")
-  // Insert \n\n before and \n after so the header is on its own line
   const afterPuncRe = new RegExp(
     `([.!?])\\s+(${SECTION_NAMES_RE})\\s`,
     "gi"
   );
-  result = result.replace(afterPuncRe, "$1\n\n$2\n");
+  content = content.replace(afterPuncRe, "$1\n\n$2\n");
 
   // Pattern 3: Standalone "Abstract" often appears without punctuation before it
-  // (e.g., "Author Name 1,2 Abstract Background:" or "user@email.com Abstract The...")
-  result = result.replace(/(\S)\s+(Abstract)\s(?=[A-Z])/gi, "$1\n\n$2\n");
+  content = content.replace(/(\S)\s+(Abstract)\s(?=[A-Z])/gi, "$1\n\n$2\n");
 
   // Pattern 4: Numbered section headers after punctuation
-  // (e.g., "...40K sentences. 7 Conclusion In this..." or "...GPUs. 2 Background The...")
-  // The section number sits between punctuation and section name
   const numberedRe = new RegExp(
     `([.!?])\\s+(\\d{1,2}(?:\\.\\d{1,2})?)\\s+(${SECTION_NAMES_RE})\\s`,
     "gi"
   );
-  result = result.replace(numberedRe, "$1\n\n$2 $3\n");
+  content = content.replace(numberedRe, "$1\n\n$2 $3\n");
 
   // Pattern 5: Numbered section headers after word characters (no punctuation)
-  // (e.g., "...Solidity 1 INTRODUCTION The purpose..." or "...bootstrap5 2 MOTIVATION Research...")
   // Only matches when section name is ALL CAPS to reduce false positives
   const numberedAfterWordRe = new RegExp(
     `(\\w)\\s+(\\d{1,2}(?:\\.\\d{1,2})?)\\s+((?:${SECTION_NAMES_RE})(?=\\s))(?=[A-Z\\s]*[A-Z]{2})`,
     "gi"
   );
-  result = result.replace(numberedAfterWordRe, (match, pre, num, name) => {
-    // Only insert break if the section name is ALL CAPS (strong heading signal)
+  content = content.replace(numberedAfterWordRe, (match, pre, num, name) => {
     if (name === name.toUpperCase()) {
       return `${pre}\n\n${num} ${name}\n`;
     }
     return match;
   });
 
+  let result = preamble + content;
+
   // Step 2: If text is still very flat (>2000 chars per line average),
-  // break on sentence-ending period followed by capital letter
+  // break on sentence-ending period followed by capital letter.
+  // Guards: skip figure/table captions and table data contexts.
   const newLineCount = result.split("\n").length;
   if (newLineCount < result.length / 2000) {
-    result = result.replace(/(\.) ([A-Z][a-z])/g, "$1\n$2");
+    result = result.replace(/(\.) ([A-Z][a-z])/g, (match, dot, cap, offset) => {
+      // Guard: don't break after figure/table references (e.g., "Figure 1. Caption")
+      const preceding = result.substring(Math.max(0, offset - 30), offset);
+      if (FIG_TABLE_RE.test(preceding)) return match;
+
+      // Guard: don't break in table data contexts (mostly numbers/delimiters)
+      if (isTableDataContext(result, offset)) return match;
+
+      return `.\n${cap}`;
+    });
   }
 
   return result;
@@ -193,6 +275,9 @@ export class ContentResolver {
     const normalized = normalizePdfText(result.text);
     if (normalized !== result.text) {
       diagnostics.push(`PDF text normalized: ${result.text.split("\n").length} → ${normalized.split("\n").length} lines`);
+    }
+    if (detectDoubleColumnLayout(normalized)) {
+      diagnostics.push("Possible double-column layout detected — extraction quality may be lower");
     }
     const text = this.truncateText(normalized, diagnostics);
 
@@ -397,6 +482,9 @@ export class ContentResolver {
       const normalized = normalizePdfText(result.text);
       if (normalized !== result.text) {
         diagnostics.push(`PDF text normalized: ${result.text.split("\n").length} → ${normalized.split("\n").length} lines`);
+      }
+      if (detectDoubleColumnLayout(normalized)) {
+        diagnostics.push("Possible double-column layout detected — extraction quality may be lower");
       }
       diagnostics.push(`PDF extracted: ${result.pageCount} pages, ${normalized.length} chars`);
       return { text: normalized, metadata: result.metadata };

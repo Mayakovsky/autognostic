@@ -1,0 +1,61 @@
+Benchmark Results for Large Language Models on Scientific QA
+
+Abstract
+
+We evaluate 12 large language models on a new scientific question-answering
+benchmark spanning physics, chemistry, and biology.
+
+1 Introduction
+
+Large language models have shown remarkable capabilities across diverse tasks.
+However, their performance on domain-specific scientific questions remains
+understudied.
+
+2 Results
+
+Table 1: Overall accuracy by model and domain
+
+Model           Physics  Chemistry  Biology  Average
+GPT-4           0.823    0.791      0.834    0.816
+Claude-3        0.815    0.802      0.828    0.815
+Gemini-Ultra    0.798    0.776      0.811    0.795
+LLaMA-70B       0.734    0.712      0.756    0.734
+Mixtral-8x7B    0.721    0.698      0.742    0.720
+Falcon-180B     0.709    0.685      0.731    0.708
+Yi-34B          0.687    0.671      0.703    0.687
+Qwen-72B        0.701    0.689      0.718    0.703
+DeepSeek-67B    0.693    0.678      0.711    0.694
+Phi-2           0.612    0.589      0.634    0.612
+Mistral-7B      0.645    0.623      0.667    0.645
+LLaMA-7B        0.534    0.512      0.556    0.534
+
+Table 2: Performance by question difficulty
+
+Difficulty   Easy    Medium   Hard    Expert
+GPT-4        0.95    0.87     0.72    0.61
+Claude-3     0.94    0.86     0.73    0.59
+Gemini       0.93    0.84     0.69    0.56
+
+Table 3: Statistical significance (p-values, paired t-test)
+
+           GPT-4   Claude  Gemini  LLaMA70
+GPT-4      -       0.412   0.003   <0.001
+Claude     0.412   -       0.008   <0.001
+Gemini     0.003   0.008   -       <0.001
+LLaMA70    <0.001  <0.001  <0.001  -
+
+3 Discussion
+
+The top three models (GPT-4, Claude-3, Gemini-Ultra) show no statistically
+significant differences in overall performance. However, performance degrades
+substantially for expert-level questions across all models.
+
+4 Conclusion
+
+Our benchmark reveals that current LLMs have strong but uneven scientific
+reasoning capabilities. Expert-level questions remain challenging.
+
+References
+
+[1] OpenAI (2023). GPT-4 Technical Report.
+[2] Anthropic (2024). Claude 3 Model Card.
