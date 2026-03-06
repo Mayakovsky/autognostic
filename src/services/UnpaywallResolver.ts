@@ -8,6 +8,7 @@
  */
 
 import { logger } from "../utils/logger";
+import { getRateLimiter } from "./RateLimiter";
 
 export interface UnpaywallResult {
   pdfUrl: string | null;
@@ -30,6 +31,8 @@ export async function resolveOpenAccess(doi: string): Promise<UnpaywallResult | 
   const url = `${UNPAYWALL_BASE}/${encodeURIComponent(doi)}?email=${encodeURIComponent(email)}`;
 
   try {
+    await getRateLimiter().acquire("unpaywall");
+
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(TIMEOUT_MS),

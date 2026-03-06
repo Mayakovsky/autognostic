@@ -10,6 +10,7 @@
  */
 
 import { logger } from "../utils/logger";
+import { getRateLimiter } from "./RateLimiter";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -197,6 +198,8 @@ export async function searchWorks(
   const url = `${OPENALEX_BASE}/works?${params.toString()}`;
 
   try {
+    await getRateLimiter().acquire("openAlex");
+
     const res = await fetch(url, {
       headers: {
         Accept: "application/json",
@@ -239,6 +242,8 @@ export async function getWork(openalexId: string): Promise<OpenAlexResult | null
   const url = `${OPENALEX_BASE}/works/${encodeURIComponent(openalexId)}?mailto=${encodeURIComponent(email)}`;
 
   try {
+    await getRateLimiter().acquire("openAlex");
+
     const res = await fetch(url, {
       headers: {
         Accept: "application/json",

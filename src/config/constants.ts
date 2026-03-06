@@ -27,6 +27,20 @@ export const DB_DEFAULTS = {
   POLL_INTERVAL_MS: 250,
 } as const;
 
+export const FETCH_CACHE_DEFAULTS = {
+  MAX_ENTRIES: 50,
+  TTL_MS: 1_800_000,          // 30 minutes
+  MAX_TOTAL_BYTES: 50_000_000, // 50MB
+} as const;
+
+export const RATE_LIMITS = {
+  crossref: { maxTokens: 20, refillRate: 10, refillIntervalMs: 1000 },
+  unpaywall: { maxTokens: 5, refillRate: 1, refillIntervalMs: 1000 },
+  semanticScholar: { maxTokens: 10, refillRate: 3, refillIntervalMs: 1000 },
+  openAlex: { maxTokens: 10, refillRate: 5, refillIntervalMs: 1000 },
+  general: { maxTokens: 5, refillRate: 2, refillIntervalMs: 1000 },
+} as const;
+
 export const ANALYZER_DEFAULTS = {
   /** Max sentence boundaries stored in profile (first/last 100 kept when exceeded) */
   MAX_SENTENCES: 10_000,

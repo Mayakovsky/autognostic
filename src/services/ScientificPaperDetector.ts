@@ -1,5 +1,6 @@
 import type { StaticDetectionMetadata, PaperMetadata } from "../db/schema";
 import { logger } from "../utils/logger";
+import { getRateLimiter } from "./RateLimiter";
 
 /**
  * URL patterns for known scientific paper repositories and publishers
@@ -441,6 +442,8 @@ export class ScientificPaperDetector {
         headers["User-Agent"] = `autognostic/1.0 (mailto:${this.crossrefMailto})`;
       }
 
+      await getRateLimiter().acquire("crossref");
+
       const res = await fetch(
         `https://api.crossref.org/works/${encodeURIComponent(doi)}`,
         {
@@ -502,6 +505,8 @@ export class ScientificPaperDetector {
       if (this.crossrefMailto) {
         headers["User-Agent"] = `autognostic/1.0 (mailto:${this.crossrefMailto})`;
       }
+
+      await getRateLimiter().acquire("crossref");
 
       const res = await fetch(`https://api.crossref.org/journals/${issn}`, {
         headers,

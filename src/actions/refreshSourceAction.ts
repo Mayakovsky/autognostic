@@ -4,6 +4,7 @@ import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository
 import { ReconciliationService } from "../orchestrator/ReconciliationService";
 import type { SourceConfig } from "../orchestrator/SourceConfig";
 import { safeSerialize } from "../utils/safeSerialize";
+import { getFetchCache } from "../services/FetchCache";
 
 export const RefreshSourceAction: Action = {
   name: "REFRESH_KNOWLEDGE_SOURCE",
@@ -91,6 +92,9 @@ export const RefreshSourceAction: Action = {
       // Update sync timestamps
       const now = new Date();
       await sourcesRepo.updateSyncTimestamps(sourceId, now);
+
+      // Invalidate cache for this source URL so next fetch gets fresh content
+      getFetchCache().invalidate(source.sourceUrl);
 
       const text =
         `Refreshed source ${sourceId}: ${result.status}. ` +

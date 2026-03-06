@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { isPdfBytes, normalizeToRawUrl, normalizePdfText } from "../src/services/ContentResolver";
+import { resetFetchCache } from "../src/services/FetchCache";
+import { resetRateLimiter } from "../src/services/RateLimiter";
+import { resetUrlDeduplicator } from "../src/services/UrlDeduplicator";
 
 // Minimal valid %PDF header bytes for testing
 const PDF_MAGIC = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]); // %PDF-1.4
@@ -122,6 +125,11 @@ const HTML_NO_ARTICLE = `<!DOCTYPE html>
 
 describe("ContentResolver", () => {
   beforeEach(() => {
+    // Reset singletons so tests don't interfere via shared cache/limiter
+    resetFetchCache();
+    resetRateLimiter();
+    resetUrlDeduplicator();
+
     // Reset the mock return value before each test
     pdfExtractResult = {
       text: "Mock PDF text.",

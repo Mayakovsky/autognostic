@@ -1,5 +1,5 @@
 # HEARTBEAT — plugin-autognostic
-> Last updated: 2026-03-06 17:31 (local)
+> Last updated: 2026-03-06 17:43 (local)
 > Updated by: Claude Opus 4.6 — Phase 4 WS-3 OpenAlex search
 > Session label: Phase 4 WS-3 implementation — SEARCH_PAPERS action
 > Staleness gate: 2026-03-06 — if today is >3 days past this,
@@ -179,11 +179,11 @@ User: URL or DOI or search query
 ## Session Log (last 5 entries, newest first)
 | Date | Agent | What changed | Outcome |
 |------|-------|-------------|---------|
+| 2026-03-06 | Mayakovsky | feat: rate limiting, fetch cache, URL deduplication — prod | 26c706a |
 | 2026-03-06 | Mayakovsky | fix: error UX — actionable failure messages for paywall, t | e197409 |
 | 2026-03-06 | Mayakovsky | fix: PDF robustness — figure/table guards, preamble skip,  | ed11f36 |
 | 2026-03-06 | Mayakovsky | feat: copyright license gate — block full-text ingestion o | 1672e6c |
 | 2026-03-06 | Mayakovsky | feat(phase4): WS-3 OpenAlex search — SEARCH_PAPERS action | 8a78a5a |
-| 2026-03-06 | Claude Opus 4.6 | Phase 4 WS-3: OpenAlex search — SEARCH_PAPERS action (57 new tests) | — |
 
 ## Guardrails (DO / DON'T)
 DO:

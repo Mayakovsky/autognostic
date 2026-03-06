@@ -9,6 +9,7 @@
  */
 
 import { logger } from "../utils/logger";
+import { getRateLimiter } from "./RateLimiter";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,6 +131,8 @@ export async function lookupPaper(identifier: string): Promise<S2Paper | null> {
   const url = `${S2_API_BASE}/paper/${encodeURIComponent(paperId)}?fields=${PAPER_FIELDS}`;
 
   try {
+    await getRateLimiter().acquire("semanticScholar");
+
     const res = await fetch(url, {
       headers: buildHeaders(),
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -167,6 +170,8 @@ export async function getRelatedPapers(paperId: string, limit?: number): Promise
   const url = `${S2_RECOMMEND_BASE}/${encodeURIComponent(paperId)}?fields=${PAPER_FIELDS}&limit=${n}`;
 
   try {
+    await getRateLimiter().acquire("semanticScholar");
+
     const res = await fetch(url, {
       headers: buildHeaders(),
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -206,6 +211,8 @@ export async function getCitations(paperId: string, limit?: number): Promise<S2P
   const url = `${S2_API_BASE}/paper/${encodeURIComponent(paperId)}/citations?fields=${PAPER_FIELDS}&limit=${n}`;
 
   try {
+    await getRateLimiter().acquire("semanticScholar");
+
     const res = await fetch(url, {
       headers: buildHeaders(),
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -248,6 +255,8 @@ export async function getReferences(paperId: string, limit?: number): Promise<S2
   const url = `${S2_API_BASE}/paper/${encodeURIComponent(paperId)}/references?fields=${PAPER_FIELDS}&limit=${n}`;
 
   try {
+    await getRateLimiter().acquire("semanticScholar");
+
     const res = await fetch(url, {
       headers: buildHeaders(),
       signal: AbortSignal.timeout(TIMEOUT_MS),

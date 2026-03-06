@@ -2,6 +2,7 @@ import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallbac
 import { requireValidToken, AutognosticAuthError } from "../auth/validateToken";
 import { removeDocumentByUrl } from "../integration/removeFromKnowledge";
 import { safeSerialize } from "../utils/safeSerialize";
+import { getFetchCache } from "../services/FetchCache";
 
 export const RemoveDocumentAction: Action = {
   name: "REMOVE_KNOWLEDGE_DOCUMENT",
@@ -99,6 +100,9 @@ export const RemoveDocumentAction: Action = {
       }
       return { success: false, text, data: safeSerialize({ error: "not_found", url }) };
     }
+
+    // Invalidate cache so the URL can be re-fetched if re-added
+    getFetchCache().invalidate(url);
 
     const text = `Removed document ${url} from both semantic and verbatim stores.`;
     if (callback) {

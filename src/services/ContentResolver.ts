@@ -15,6 +15,9 @@ import { getScientificPaperDetector } from "./ScientificPaperDetector";
 import { resolveOpenAccess, extractDoiFromUrl } from "./UnpaywallResolver";
 import { ContentResolverError } from "../errors/ContentResolverError";
 import { ErrorCode } from "../errors/AutognosticError";
+import { getFetchCache } from "./FetchCache";
+import { getRateLimiter } from "./RateLimiter";
+import { getUrlDeduplicator } from "./UrlDeduplicator";
 
 export interface ResolvedContent {
   text: string;
@@ -206,8 +209,52 @@ export class ContentResolver {
 
   /**
    * Resolve a URL to clean, structured text content.
+   * Checks cache first, deduplicates in-flight requests, and rate-limits fetches.
    */
   async resolve(url: string): Promise<ResolvedContent> {
+    // 1. Check cache
+    const cache = getFetchCache();
+    const cached = cache.get(url);
+    if (cached) {
+      return {
+        text: cached.text,
+        contentType: cached.contentType,
+        source: cached.source,
+        title: cached.title,
+        resolvedUrl: cached.resolvedUrl,
+        metadata: cached.metadata as ResolvedContent["metadata"],
+        diagnostics: ["Cache hit"],
+      };
+    }
+
+    // 2. Deduplicate concurrent requests for same URL
+    const dedup = getUrlDeduplicator();
+    return dedup.deduplicate(url, async () => {
+      // 3. Rate limit
+      const domain = inferRateLimitDomain(url);
+      await getRateLimiter().acquire(domain);
+
+      // 4. Existing fetch/parse pipeline
+      const result = await this.fetchAndResolve(url);
+
+      // 5. Cache result
+      cache.set(url, {
+        text: result.text,
+        contentType: result.contentType,
+        source: result.source,
+        title: result.title,
+        resolvedUrl: result.resolvedUrl,
+        metadata: result.metadata,
+      });
+
+      return result;
+    });
+  }
+
+  /**
+   * Internal: fetch URL and resolve to text content.
+   */
+  private async fetchAndResolve(url: string): Promise<ResolvedContent> {
     const diagnostics: string[] = [];
     const resolvedUrl = normalizeToRawUrl(url);
 
@@ -568,6 +615,22 @@ export function isPdfBytes(data: Uint8Array): boolean {
     data[3] === 0x46 && // F
     data[4] === 0x2d    // -
   );
+}
+
+/**
+ * Map a URL to a rate-limit bucket domain name.
+ */
+function inferRateLimitDomain(url: string): string {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (hostname.includes("crossref.org")) return "crossref";
+    if (hostname.includes("unpaywall.org")) return "unpaywall";
+    if (hostname.includes("semanticscholar.org")) return "semanticScholar";
+    if (hostname.includes("openalex.org")) return "openAlex";
+    return "general";
+  } catch {
+    return "general";
+  }
 }
 
 /**
