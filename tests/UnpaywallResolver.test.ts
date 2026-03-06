@@ -129,7 +129,7 @@ describe("UnpaywallResolver", () => {
       expect(callUrl).toContain("email=autognostic-plugin%40users.noreply.github.com");
     });
 
-    it("should return null when best_oa_location is null", async () => {
+    it("should return result with null pdfUrl when best_oa_location is null", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -142,10 +142,12 @@ describe("UnpaywallResolver", () => {
       });
 
       const result = await resolveOpenAccess("10.1234/closed");
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.pdfUrl).toBeNull();
+      expect(result!.oaStatus).toBe("closed");
     });
 
-    it("should return null when best_oa_location has no url_for_pdf", async () => {
+    it("should return result with null pdfUrl when best_oa_location has no url_for_pdf", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -161,7 +163,10 @@ describe("UnpaywallResolver", () => {
       });
 
       const result = await resolveOpenAccess("10.1234/nopdf");
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.pdfUrl).toBeNull();
+      expect(result!.oaStatus).toBe("gold");
+      expect(result!.host).toBe("publisher");
     });
 
     it("should return null when rate limited (429)", async () => {

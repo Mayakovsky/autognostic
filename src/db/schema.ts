@@ -96,6 +96,7 @@ export const autognosticDocuments = autognostic.table("documents", {
   mimeType: text("mime_type"),
   byteSize: integer("byte_size"),
   profile: jsonb("profile").$type<import("../services/DocumentAnalyzer.types").DocumentProfile | null>(),
+  oaStatus: text("oa_status"), // null = not a paper / not checked; "gold"|"green"|"bronze"|"hybrid"|"closed"|"unknown"
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   urlIdx: index("autognostic_documents_url_idx").on(table.url),

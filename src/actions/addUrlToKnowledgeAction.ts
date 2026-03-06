@@ -1,11 +1,12 @@
 import type { Action, ActionResult, IAgentRuntime, Memory, State, HandlerCallback, HandlerOptions, Content, UUID } from "@elizaos/core";
 import { mirrorDocToKnowledge } from "../integration/mirrorDocToKnowledge";
 import { validateToken, isAuthEnabled } from "../auth/validateToken";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { getScientificPaperDetector } from "../services/ScientificPaperDetector";
 import { resolveOpenAccess, extractDoiFromUrl } from "../services/UnpaywallResolver";
 import { createScientificPaperHandler } from "../services/ScientificPaperHandler";
 import { AutognosticSourcesRepository } from "../db/autognosticSourcesRepository";
+import { autognosticDocumentsRepository } from "../db/autognosticDocumentsRepository";
 import { wrapError, ErrorCode } from "../errors";
 import { safeSerialize } from "../utils/safeSerialize";
 
@@ -221,14 +222,72 @@ export const AddUrlToKnowledgeAction: Action = {
       // Step 1b: Try Unpaywall OA resolution if we have a DOI
       let ingestUrl = url;
       const doi = extractDoiFromUrl(url);
+      let oaStatus: string | undefined;
       if (doi) {
         const oaResult = await resolveOpenAccess(doi);
         if (oaResult) {
-          console.log(
-            `[autognostic] Unpaywall: resolved DOI ${doi} → ${oaResult.pdfUrl} (${oaResult.oaStatus}, ${oaResult.host})`
-          );
-          ingestUrl = oaResult.pdfUrl;
+          oaStatus = oaResult.oaStatus;
+          if (oaResult.pdfUrl) {
+            console.log(
+              `[autognostic] Unpaywall: resolved DOI ${doi} → ${oaResult.pdfUrl} (${oaResult.oaStatus}, ${oaResult.host})`
+            );
+            ingestUrl = oaResult.pdfUrl;
+          } else {
+            console.log(
+              `[autognostic] Unpaywall: DOI ${doi} status=${oaResult.oaStatus} (no OA PDF available)`
+            );
+          }
         }
+      }
+
+      // Step 1c: License gate — block full-text ingestion of closed-access papers
+      if (doi && oaStatus === "closed") {
+        console.log(`[autognostic] License gate: DOI ${doi} is closed-access — storing metadata only`);
+
+        // Store a metadata-only record (no content)
+        const contentHash = createHash("sha256").update("").digest("hex");
+        await autognosticDocumentsRepository.store(runtime, {
+          sourceId,
+          versionId,
+          url,
+          content: "",
+          contentHash,
+          mimeType: "text/plain",
+          byteSize: 0,
+          oaStatus: "closed",
+        });
+
+        // Still run scientific paper detection for classification
+        const paperHandler = createScientificPaperHandler(runtime);
+        const handlerResult = await paperHandler.process(url, "", randomUUID());
+
+        const responseText =
+          `[METADATA ONLY] This paper is closed-access (paywalled). ` +
+          `Stored metadata only (DOI: ${doi}). ` +
+          `Full-text ingestion is blocked to respect copyright. ` +
+          `Use Unpaywall or your institution's access for the full text.`;
+
+        if (callback) await callback({ text: responseText, action: "ADD_URL_TO_KNOWLEDGE" });
+        return {
+          success: true,
+          text: responseText,
+          data: safeSerialize({
+            url,
+            doi,
+            oaStatus: "closed",
+            accessRestriction: "metadata_only",
+            sourceId,
+            versionId,
+            isScientificPaper: handlerResult.isScientificPaper,
+            lakehouseZone: handlerResult.zone,
+            paperMetadata: handlerResult.paperMetadata ? {
+              doi: handlerResult.paperMetadata.doi,
+              title: handlerResult.paperMetadata.title,
+              journal: handlerResult.paperMetadata.journal,
+              authors: handlerResult.paperMetadata.authors,
+            } : undefined,
+          }),
+        };
       }
 
       console.log(
@@ -242,6 +301,7 @@ export const AddUrlToKnowledgeAction: Action = {
         roomId,
         entityId: runtime.agentId,
         worldId: runtime.agentId,
+        oaStatus,
         metadata: {
           addedVia: "ADD_URL_TO_KNOWLEDGE",
           sourceId,

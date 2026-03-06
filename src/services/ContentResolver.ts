@@ -261,7 +261,7 @@ export class ContentResolver {
       if (doi) {
         diagnostics.push(`Trying Unpaywall OA resolution for DOI: ${doi}`);
         const oaResult = await resolveOpenAccess(doi);
-        if (oaResult) {
+        if (oaResult?.pdfUrl) {
           diagnostics.push(`Unpaywall resolved: ${oaResult.pdfUrl} (${oaResult.oaStatus})`);
           const pdfResult = await this.tryPdfDownload(oaResult.pdfUrl, diagnostics);
           if (pdfResult) {

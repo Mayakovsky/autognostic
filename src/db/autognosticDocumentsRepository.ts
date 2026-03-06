@@ -15,6 +15,7 @@ export class AutognosticDocumentsRepository {
     contentHash: string;
     mimeType?: string;
     byteSize?: number;
+    oaStatus?: string;
   }) {
     const db = await getDb(this.runtime);
     return db.insert(autognosticDocuments).values(doc).returning();

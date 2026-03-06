@@ -15,6 +15,7 @@ export interface MirrorDocParams {
   entityId: UUID;
   worldId?: UUID;
   metadata?: Record<string, unknown>;
+  oaStatus?: string;
 }
 
 export async function mirrorDocToKnowledge(
@@ -63,6 +64,7 @@ export async function mirrorDocToKnowledge(
       contentHash,
       mimeType: resolved.contentType,
       byteSize: Buffer.byteLength(resolved.text, "utf8"),
+      ...(params.oaStatus ? { oaStatus: params.oaStatus } : {}),
     });
 
     // Compute and store structural profile for retrieval

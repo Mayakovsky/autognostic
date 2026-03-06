@@ -10,7 +10,7 @@
 import { logger } from "../utils/logger";
 
 export interface UnpaywallResult {
-  pdfUrl: string;
+  pdfUrl: string | null;
   oaStatus: string;
   host: string;
   version: string;
@@ -58,7 +58,14 @@ export async function resolveOpenAccess(doi: string): Promise<UnpaywallResult | 
         oaStatus: data.oa_status,
         locationCount: data.oa_locations?.length ?? 0,
       });
-      return null;
+      // Return result with null pdfUrl so callers can inspect oaStatus
+      // (e.g., license gate needs to know "closed" even without a PDF URL)
+      return {
+        pdfUrl: null,
+        oaStatus: data.oa_status || "unknown",
+        host: best?.host_type || "unknown",
+        version: best?.version || "unknown",
+      };
     }
 
     const result: UnpaywallResult = {
