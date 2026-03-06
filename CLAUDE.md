@@ -16,7 +16,7 @@
 | **Framework** | ElizaOS v1.x (`@elizaos/core` 1.6.5) |
 | **Database** | PGlite (embedded) + optional PostgreSQL |
 | **Package Manager** | `bun` (required) |
-| **Test Framework** | Vitest (306 tests, 17 files) |
+| **Test Framework** | Vitest (449 tests, 22 files) |
 | **Dependencies** | `@elizaos/plugin-knowledge`, `@elizaos/plugin-sql` |
 
 ---
@@ -42,8 +42,9 @@ Modify without confirmation:
 
 ```
 src/
-├── actions/               # Agent actions (10 actions registered)
+├── actions/               # Agent actions (12 actions registered)
 │   ├── addUrlToKnowledgeAction.ts       # ADD_URL_TO_KNOWLEDGE
+│   ├── findRelatedPapersAction.ts       # FIND_RELATED_PAPERS (S2 discovery)
 │   ├── getQuoteAction.ts                # GET_EXACT_QUOTE (sentence/paragraph/section/search)
 │   ├── listDocumentsAction.ts           # LIST_DOCUMENTS
 │   ├── listSourcesAction.ts             # LIST_SOURCES
@@ -51,6 +52,7 @@ src/
 │   ├── refreshSourceAction.ts           # REFRESH_SOURCE
 │   ├── removeDocumentAction.ts          # REMOVE_DOCUMENT
 │   ├── removeSourceAction.ts            # REMOVE_SOURCE
+│   ├── searchPapersAction.ts            # SEARCH_PAPERS (OpenAlex topic search)
 │   ├── setAutognosticRefreshPolicyAction.ts
 │   ├── setAutognosticSizePolicyAction.ts
 │   └── setVersionTrackingAction.ts      # SET_VERSION_TRACKING
@@ -61,6 +63,9 @@ src/
 │   ├── DocumentAnalyzer.ts             # Sentence/paragraph/line profiling (pure function)
 │   ├── DocumentAnalyzer.types.ts       # Profile type definitions
 │   ├── GrammarEngine.ts               # Phrase/clause detection (on-demand, not stored)
+│   ├── OpenAlexService.ts            # Topic search via OpenAlex (278-470M works, pure)
+│   ├── SemanticScholarService.ts     # Paper discovery via S2 API (related, citations, refs, pure)
+│   ├── UnpaywallResolver.ts          # DOI → OA PDF URL via Unpaywall (pure)
 │   ├── WebPageProcessor.ts            # HTML→text via linkedom (publisher selectors, ref whitelist)
 │   ├── PdfExtractor.ts               # PDF→text via unpdf@0.11.0 (Bun-safe) — DO NOT MODIFY
 │   ├── ScientificSectionDetector.ts   # Section detection (markdown, numbered, ALL CAPS, inferred)
@@ -219,7 +224,7 @@ Remove-Item -Recurse -Force .\.eliza
 
 ## Testing
 
-Tests live in `tests/` (17 files, 306 tests). Key test files:
+Tests live in `tests/` (22 files, 449 tests). Key test files:
 
 | File | What it covers |
 |------|---------------|
@@ -240,6 +245,11 @@ Tests live in `tests/` (17 files, 306 tests). Key test files:
 | `errors.test.ts` | Typed error hierarchy |
 | `retry.test.ts` | Retry logic + presets |
 | `auth.test.ts` | Token validation |
+| `UnpaywallResolver.test.ts` | Unpaywall OA resolution, DOI extraction, email fallback |
+| `SemanticScholarService.test.ts` | S2 paper lookup, related/citations/references, buildPaperId |
+| `findRelatedPapersAction.test.ts` | FIND_RELATED_PAPERS validate + handler, mode inference |
+| `OpenAlexService.test.ts` | OpenAlex search, filters, abstract reconstruction, email fallback |
+| `searchPapersAction.test.ts` | SEARCH_PAPERS validate + handler, filter inference, no auto-ingest |
 
 ---
 
@@ -253,6 +263,24 @@ Tests live in `tests/` (17 files, 306 tests). Key test files:
 ### GitHub API (for source sync)
 - **Purpose:** Sync knowledge from GitHub repos
 - **Auth:** Personal Access Token in `.env`
+
+### Unpaywall API (Phase 4)
+- **Purpose:** DOI → open-access PDF URL resolution
+- **Rate Limit:** 100K/day
+- **Endpoint:** `https://api.unpaywall.org/v2/{doi}?email={email}`
+- **Auth:** Email only (UNPAYWALL_EMAIL or CROSSREF_MAILTO env var)
+
+### Semantic Scholar API (Phase 4)
+- **Purpose:** Paper discovery — related papers, citations, references
+- **Rate Limit:** 5K requests/5min (higher with API key)
+- **Endpoint:** `https://api.semanticscholar.org/graph/v1/paper/{id}`
+- **Auth:** Optional API key (SEMANTIC_SCHOLAR_API_KEY env var)
+
+### OpenAlex API (Phase 4)
+- **Purpose:** Topic-based paper search (broadest catalog: 278-470M works)
+- **Rate Limit:** 100K credits/day (polite pool with email)
+- **Endpoint:** `https://api.openalex.org/works?search={query}`
+- **Auth:** Email for polite pool (UNPAYWALL_EMAIL or CROSSREF_MAILTO env var)
 
 ### Ollama (embeddings)
 - **Purpose:** Direct REST embedding (768 dims)

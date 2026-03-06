@@ -18,6 +18,7 @@ import { RemoveDocumentAction } from "./actions/removeDocumentAction";
 import { SetVersionTrackingAction } from "./actions/setVersionTrackingAction";
 import { RefreshSourceAction } from "./actions/refreshSourceAction";
 import { FindRelatedPapersAction } from "./actions/findRelatedPapersAction";
+import { SearchPapersAction } from "./actions/searchPapersAction";
 
 import { fullDocumentProvider } from "./providers/fullDocumentProvider";
 import { knowledgeSummaryProvider } from "./providers/knowledgeSummaryProvider";
@@ -84,6 +85,7 @@ export const autognosticPlugin: Plugin = {
     SetVersionTrackingAction,
     RefreshSourceAction,
     FindRelatedPapersAction,
+    SearchPapersAction,
   ],
   providers: [knowledgeSummaryProvider, fullDocumentProvider],
   // Override plugin-ollama's broken TEXT_EMBEDDING handler (ollama-ai-provider v1
@@ -137,6 +139,13 @@ export {
   type S2Paper,
   type S2RelatedResult,
 } from "./services/SemanticScholarService";
+
+export {
+  searchWorks,
+  getWork,
+  type OpenAlexResult,
+  type SearchOptions,
+} from "./services/OpenAlexService";
 
 // Schema types
 export type {
